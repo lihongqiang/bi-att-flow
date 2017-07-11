@@ -5,20 +5,29 @@ import tensorflow as tf
 from basic.main import main as m
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+import time
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 flags = tf.app.flags
 
 # Names and directories
-flags.DEFINE_string("model_name", "basic", "Model name [basic]")
-flags.DEFINE_string("data_dir", "data/squad_EQnA", "Data dir [data/squad]")# 数据路径
-flags.DEFINE_string("run_id", "0", "Run ID [0]")
-flags.DEFINE_string("out_base_dir", "out", "out base dir [out]")
+# flags.DEFINE_string("model_name", "squad", "Model name [basic]")
+flags.DEFINE_string("model_name", "EQnA", "Model name [basic]")
+
+# flags.DEFINE_string("data_dir", "data/squad", "Data dir [data/squad]")# 数据路径
+flags.DEFINE_string("data_dir", "data/EQnA", "Data dir [data/squad]")# 数据路径
+
+#flags.DEFINE_string("run_id", "0", "Run ID [0]")
 flags.DEFINE_string("forward_name", "single", "Forward name [single]")
+flags.DEFINE_string("out_base_dir", "out", "out base dir [out]")
+flags.DEFINE_string("out_dir", "", "out dir [out/date]")
 flags.DEFINE_string("answer_path", "", "Answer path []")# 设置答案的路径
 flags.DEFINE_string("eval_path", "", "Eval path []")    # 设置评价脚本的路径
+flags.DEFINE_string("shared_path", "", "Shared path []")# 生成的共享文件路径
+
+# test
 flags.DEFINE_string("load_path", "", "Load path []")    # 设置加载的模型路径
-flags.DEFINE_string("shared_path", "", "Shared path []")
+flags.DEFINE_integer("load_step", 0, "load step [0]")   # step
 
 # Device placement
 flags.DEFINE_string("device", "/cpu:0", "default device for summing gradients. [/cpu:0]")
@@ -36,16 +45,19 @@ flags.DEFINE_bool("wy", False, "Use wy for loss / eval? [False]")
 flags.DEFINE_bool("na", False, "Enable no answer strategy and learn bias? [False]")
 flags.DEFINE_float("th", 0.5, "Threshold [0.5]")
 
-# top K
+# top K answer
 flags.DEFINE_integer("topk", 0, "score top k")
 
+# online
+flags.DEFINE_boolean("online", False, "online")
+
 # Training / test parameters
-flags.DEFINE_integer("batch_size", 60, "Batch size [60]")
+flags.DEFINE_integer("batch_size", 10, "Batch size [60]")
 flags.DEFINE_integer("val_num_batches", 100, "validation num batches [100]")
-flags.DEFINE_integer("test_num_batches", 0, "test num batches [0]")
+flags.DEFINE_integer("test_num_batches", 20, "test num batches [0]")
 flags.DEFINE_integer("num_epochs", 12, "Total number of epochs for training [12]")
 flags.DEFINE_integer("num_steps", 20000, "Number of steps [20000]")
-flags.DEFINE_integer("load_step", 0, "load step [0]")
+
 flags.DEFINE_float("init_lr", 0.001, "Initial learning rate [0.001]")
 flags.DEFINE_float("input_keep_prob", 0.8, "Input keep prob for the dropout of LSTM weights [0.8]")
 flags.DEFINE_float("keep_prob", 0.8, "Keep prob for the dropout of Char-CNN weights [0.8]")
@@ -114,7 +126,8 @@ def main(_):
     # config.out_dir = os.path.join(config.out_base_dir, config.model_name, str(config.run_id).zfill(2)  )
     
     # EQnA
-    config.out_dir = os.path.join(config.out_base_dir, config.model_name, str(config.run_id).zfill(2) + '_EQnA' )
+    if not config.out_dir:
+        config.out_dir = os.path.join(config.out_base_dir, config.model_name, time.strftime("%d-%m-%Y"))
     
     print ('out dir = ' + config.out_dir)
 

@@ -117,23 +117,47 @@ def get_best_span_topk(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi =
     k = min(k, len(topk_sent_word_span))
     return zip(*(topk_sent_word_span[:k]))
 
-def get_best_span_topk_sent(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大; 限制在一句话中
-    topk_sent_word_span = list()
+def check(sent_id, word_id, word_spans):
+    if len(word_spans) == 0:
+        return True
+    else:
+        for span in word_spans:
+            sid = span[0][0][0]
+            stid = span[0][0][1]
+            edid = span[0][1][1]
+            if sent_id == sid and (stid <= word_id and word_id < edid):
+                return False
+        return True
     
-    for f, (ypif, yp2if) in enumerate(zip(ypi, yp2i)):   # [M, JX]
-        argmax_j1 = 0
-        for j in range(len(ypif)):  # [JX]
-            val1 = ypif[argmax_j1]
-            if val1 < ypif[j]:
-                val1 = ypif[j]
-                argmax_j1 = j
+def get_best_span_topk_nocover(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大, nocover
 
-            val2 = yp2if[j]
-            topk_sent_word_span.append([((f, argmax_j1), (f, j + 1)), float(val1 * val2)])
+    topk_sent_word_span = list()
+    for i in range(k):
+        tmp_span = list()
+        for f, (ypif, yp2if) in enumerate(zip(ypi, yp2i)):   # [M, JX]
+            
+            argmax_j1 = 0
+            for j in range(len(ypif)):  # [JX]
                 
-    topk_sent_word_span.sort(key=lambda x: x[1], reverse=True)
-    k = min(k, len(topk_sent_word_span))
-    return zip(*(topk_sent_word_span[:k]))
+                if check(f, j, topk_sent_word_span):
+                    
+                    if argmax_j1 == -1:
+                        argmax_j1 = j
+                        
+                    val1 = ypif[argmax_j1]
+                    if val1 < ypif[j]:
+                        val1 = ypif[j]
+                        argmax_j1 = j
+    
+                    val2 = yp2if[j]
+                    tmp_span.append([((f, argmax_j1), (f, j + 1)), '%.4f' % float(val1 * val2)])
+                else:
+                    argmax_j1 = -1
+                    
+        tmp_span.sort(key=lambda x: x[1], reverse=True)
+        topk_sent_word_span.append(tmp_span[0])
+        
+    return zip(*(topk_sent_word_span))
 
 def get_best_span_wy(wypi, th):     # 获取多个块，其中每个块有连续的单词组成，每个单词的pi都大于阈值th
     chunk_spans = []                # 如果所有的值都小于0.5，则只取最大的哪一个

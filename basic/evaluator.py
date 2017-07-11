@@ -5,7 +5,7 @@ from basic.read_data import DataSet
 from my.nltk_utils import span_f1
 from my.tensorflow import padded_reshape
 from my.utils import argmax
-from squad.utils import get_phrase, get_best_span, get_best_span_wy, get_best_span_topk
+from squad.utils import get_phrase, get_best_span, get_best_span_wy, get_best_span_topk_nocover
 
 
 class Evaluation(object):
@@ -288,7 +288,7 @@ class F1Evaluator(LabeledEvaluator):
             if self.config.topk == 0:
                 spans, scores = zip(*[get_best_span(ypi, yp2i) for ypi, yp2i in zip(yp, yp2)])
             else:
-                spans, scores = zip(*[get_best_span_topk(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
+                spans, scores = zip(*[get_best_span_topk_nocover(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
 
         def _get(xi, span):
             if len(xi) <= span[0][0]:
@@ -313,14 +313,18 @@ class F1Evaluator(LabeledEvaluator):
             for id_, xi, span, context in zip(data_set.data['ids'], data_set.data['x'], spans, data_set.data['p']):
                 span_name = []
                 for sp in span:
-                    print (sp[0], sp[1])
-                    print (_get2(context, xi, sp))
+                    # print (sp[0], sp[1])
+                    # print (_get2(context, xi, sp))
+                    # print (xi)
+                    # print (context)
                     span_name.append(_get2(context, xi, sp))
                 id2answer_dict[id_] = '|'.join(span_name)
 
             id2score_dict = {}
             for id_, score in zip(data_set.data['ids'], scores):
-                id2score_dict[id_] = '|'.join(str(score))
+                # print (score)
+                # print ('|'.join(score))
+                id2score_dict[id_] = '|'.join(score)
             
         id2answer_dict['scores'] = id2score_dict
         if self.config.na:

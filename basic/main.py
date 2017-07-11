@@ -130,7 +130,10 @@ def _train(config):
 
 
 def _test(config):
-    test_data = read_data(config, 'test', True)
+    if config.online:
+        test_data = read_data(config, 'online', True)
+    else:
+        test_data = read_data(config, 'test', True)
     update_config(config, [test_data])
 
     _config_debug(config)
