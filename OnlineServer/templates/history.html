@@ -1,0 +1,57 @@
+{% extends "navbar.html" %}
+{% block content %}
+
+{% block scripts %}
+{{ super() }}
+
+<!--引入css-->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.15/css/jquery.dataTables.min.css">
+ 
+<!--引入JavaScript-->
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/1.10.15/js/jquery.dataTables.min.js"></script>
+ 
+<!--初始化代码-->
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('#table').dataTable().fnDestroy();
+        $('#table').DataTable({
+            "ajax": "http://10.190.190.137:5000/history_data",
+            "columns": [
+                { "data": 'datetime'},
+                { "data": 'context'},
+                { "data": 'question'},
+                { "data": 'num'},
+                { "data": 'answers'},
+                { "data": 'probability'},
+            ],
+            "order": [[ 0, "desc" ]]
+        }); 
+      });
+    
+</script>
+
+{% endblock %}
+
+
+<div class="container">
+    <div class="page-header">
+        <h1>Hello, {{ name }}!</h1>
+    </div>
+
+    <div>
+	<table id="table" width="100%" class="display" cellspacing="0">
+        <thead>
+            <tr>
+                <th>DateTime</th>
+                <th>Context</th>
+                <th>Question</th>
+                <th>Num</th>
+                <th>Answers</th>
+                <th>Probability</th>
+            </tr>
+        </thead>
+    </table>
+    </div>
+
+</div>
+{% endblock %}

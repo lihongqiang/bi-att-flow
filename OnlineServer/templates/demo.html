@@ -1,0 +1,101 @@
+{% extends "navbar.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2>Demo</h2>
+    </div>
+</div>
+
+<div class="container">
+<form id="getAnswer" class="form-horizontal" action="/demo" method="POST" >
+
+<div class="control-group">
+  <label class="control-group" for="inputContext">context</label>
+  <div class="controls" >
+  	<textarea rows="3" type="text" id="context" name="context" class="form-control" placeholder="please input the context" aria-describedby="basic-addon1">{{ data.context }}</textarea>
+  </div>
+</div>
+
+<div class="control-group">
+  <label class="control-label" for="inputQuestion">question</label>
+  <div class="controls">
+  	<input type="text" id="question" name="question" class="form-control" placeholder="please input the question for context" aria-describedby="basic-addon1" value="{{ data.question }}">
+  </div>
+</div> 
+
+<div class="control-group">
+  <label class="control-label" for="inputAnsNum">answer number</label>
+  <div class="controls">
+	<select id="num" name="num" form="getAnswer">
+	  <option>1</option>
+	  <option>2</option>
+	  <option>3</option>
+	  <option>4</option>
+	  <option>5</option>
+	</select>
+	<!--<input type="text" id="inputAnsNum" class="form-control" placeholder="please input the number of answer" aria-describedby="basic-addon1">-->
+  </div>
+</div>
+
+{% block scripts %}
+{{ super() }}
+<script type = "text/javascript" >
+     $('#btn_submit').click(function(){
+             $('#getAnswer').submit();
+     });   
+</script>
+{% endblock %}
+    
+</br>
+<div class="control-group">
+  <div class="controls">
+  <button type="button" class="btn btn-default center-block" data-loading-text="Loading..." id="btn_submit">Submit</button>
+</div>
+
+</form>
+</div>
+
+</br>
+
+<!--
+<div class="progress progress-striped active">
+  <div class="bar" style="width: 40%;"></div>
+</div>
+-->
+</br>
+<div class="container">
+<!--<div class="panel panel-default">-->
+  <!-- Default panel contents -->
+  <!--<div class="panel-heading">Answer Phrases</div>-->
+  <!--
+  <div class="panel-body">
+    <p>The answer phrases genearated by the BiDAF model show fellows.</p>
+  </div>
+  -->
+  <!-- Table -->
+  <table class="table table-hover">
+    <thead>
+    <tr>
+      <th>#</th>
+      <th>Phrase</th>
+      <th>Probability</th>
+    </tr>
+    </thead>
+    {% if answer %}
+          {% for phrase in answer %}
+          <tr>
+              <td>{{ phrase[0] }}</td> 
+              <td>{{ phrase[1] }}</td>
+              <td>{{ phrase[2] }}</td>
+          </tr>
+          {% endfor %}
+    {% else %}
+      
+    {% endif %}
+      
+  </table>
+<!--</div>-->
+</div>
+
+{% endblock %}
