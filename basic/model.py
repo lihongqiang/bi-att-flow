@@ -205,7 +205,7 @@ class Model(object):
                                  mask=self.x_mask,
                                  is_train=self.is_train, func=config.answer_func, scope='logits2')
 
-            flat_logits = tf.reshape(logits, [-1, M * JX])
+            flat_logits = tf.reshape(logits, [-1, M * JX])  # 对整个context做了一次softmax
             flat_yp = tf.nn.softmax(flat_logits)  # [-1, M*JX]
             flat_logits2 = tf.reshape(logits2, [-1, M * JX])
             flat_yp2 = tf.nn.softmax(flat_logits2)

@@ -159,6 +159,149 @@ def get_best_span_topk_nocover(ypi, yp2i, k):  # 获取一个片段（pi, pj+1�
         
     return zip(*(topk_sent_word_span))
 
+def get_best_span_topk_nocover_softmax(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大, nocover
+
+    topk_sent_word_span = list()
+    for i in range(k):
+        tmp_span = list()
+        #softmax 分母
+        total_score_if = 0
+        total_score_2if = 0
+        total_passage_if = 0
+        total_passage_2if = 0
+        for f, (ypif, yp2if) in enumerate(zip(ypi, yp2i)):   # [M, JX]
+            
+            argmax_j1 = 0
+            
+            for j in range(len(ypif)):  # [JX]
+                
+                if check(f, j, topk_sent_word_span):
+                    
+                    # softmax 分母计算
+                    total_score_if += np.exp(ypif[j])
+                    total_score_2if += np.exp(yp2if[j])
+                    
+                    total_passage_if += ypif[j]
+                    total_passage_2if += yp2if[j]
+                    
+                    if argmax_j1 == -1:
+                        argmax_j1 = j
+                        
+                    val1 = ypif[argmax_j1]
+                    if val1 < ypif[j]:
+                        val1 = ypif[j]
+                        argmax_j1 = j
+    
+                    val2 = yp2if[j]
+                    tmp_span.append([[(f, argmax_j1), (f, j + 1)], [val1 , val2]])
+                else:
+                    argmax_j1 = -1
+        
+        
+        
+        tmp_span.sort(key=lambda x: x[1][0]*x[1][1], reverse=True)
+        
+        if i == 0:
+            print (tmp_span[0][0], tmp_span[0][1][0], tmp_span[0][1][1])
+            topk_sent_word_span.append([tmp_span[0][0], '%.4f' % (tmp_span[0][1][0]*tmp_span[0][1][1])])
+        else:
+            # softmax
+            for spans, vals in tmp_span:
+                print (vals[0], vals[1], total_passage_if, total_passage_2if, total_score_if, total_score_2if)
+                print (np.exp(vals[0])  / total_score_if, np.exp(vals[1]) / total_score_2if)
+                break
+
+            soft_span = [ [spans, (np.exp(vals[0])  / total_score_if) * (np.exp(vals[1]) / total_score_2if)] for spans, vals in tmp_span]
+            soft_span.sort(key=lambda x: x[1], reverse=True)
+            print (i, soft_span[0])
+            print (i, soft_span[len(soft_span)-1])
+            topk_sent_word_span.append([soft_span[0][0], '%.4f' % soft_span[0][1]])
+        
+    return zip(*(topk_sent_word_span))
+
+def get_best_span_topk_nocover_fraction(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大, nocover
+
+    topk_sent_word_span = list()
+    for i in range(k):
+        tmp_span = list()
+        # 分母
+        total_passage_if = 0
+        total_passage_2if = 0
+        for f, (ypif, yp2if) in enumerate(zip(ypi, yp2i)):   # [M, JX]
+            
+            argmax_j1 = 0
+            
+            for j in range(len(ypif)):  # [JX]
+                
+                if check(f, j, topk_sent_word_span):
+                    
+                    # 分母计算
+                    total_passage_if += ypif[j]
+                    total_passage_2if += yp2if[j]
+                    
+                    if argmax_j1 == -1:
+                        argmax_j1 = j
+                        
+                    val1 = ypif[argmax_j1]
+                    if val1 < ypif[j]:
+                        val1 = ypif[j]
+                        argmax_j1 = j
+    
+                    val2 = yp2if[j]
+                    tmp_span.append([[(f, argmax_j1), (f, j + 1)], val1 * val2])
+                else:
+                    argmax_j1 = -1
+
+        tmp_span.sort(key=lambda x: x[1], reverse=True)
+        topk_sent_word_span.append([tmp_span[0][0], '%.4f' % (tmp_span[0][1]/total_passage_if/total_passage_2if)])
+       
+        
+    return zip(*(topk_sent_word_span))
+
+def get_best_span_topk_nocover_fraction_threshold(ypi, yp2i, k, thres):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大, nocover
+
+    topk_sent_word_span = list()
+    for i in range(k):
+        tmp_span = list()
+        # 分母
+        total_passage_if = 0
+        total_passage_2if = 0
+        for f, (ypif, yp2if) in enumerate(zip(ypi, yp2i)):   # [M, JX]
+            
+            argmax_j1 = 0
+            
+            for j in range(len(ypif)):  # [JX]
+                
+                if check(f, j, topk_sent_word_span):
+                    
+                    # 分母计算
+                    total_passage_if += ypif[j]
+                    total_passage_2if += yp2if[j]
+                    
+                    if argmax_j1 == -1:
+                        argmax_j1 = j
+                        
+                    val1 = ypif[argmax_j1]
+                    if val1 < ypif[j]:
+                        val1 = ypif[j]
+                        argmax_j1 = j
+    
+                    val2 = yp2if[j]
+                    tmp_span.append([[(f, argmax_j1), (f, j + 1)], val1 * val2])
+                else:
+                    argmax_j1 = -1
+
+        tmp_span.sort(key=lambda x: x[1], reverse=True)
+        if total_passage_if < 1e-8 or total_passage_2if < 1e-8:
+            break
+        score = tmp_span[0][1]/total_passage_if/total_passage_2if
+        if i > 0 and score < thres:
+            break
+        topk_sent_word_span.append([tmp_span[0][0], '%.4f' % (score)])
+       
+        
+    return zip(*(topk_sent_word_span))
+
 def get_best_span_wy(wypi, th):     # 获取多个块，其中每个块有连续的单词组成，每个单词的pi都大于阈值th
     chunk_spans = []                # 如果所有的值都小于0.5，则只取最大的哪一个
     scores = []

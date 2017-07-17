@@ -52,9 +52,9 @@ flags.DEFINE_integer("topk", 0, "score top k")
 flags.DEFINE_boolean("online", False, "online")
 
 # Training / test parameters
-flags.DEFINE_integer("batch_size", 10, "Batch size [60]")
+flags.DEFINE_integer("batch_size", 60, "Batch size [60]")
 flags.DEFINE_integer("val_num_batches", 100, "validation num batches [100]")
-flags.DEFINE_integer("test_num_batches", 20, "test num batches [0]")
+flags.DEFINE_integer("test_num_batches", 0, "test num batches [0]")
 flags.DEFINE_integer("num_epochs", 12, "Total number of epochs for training [12]")
 flags.DEFINE_integer("num_steps", 20000, "Number of steps [20000]")
 
@@ -128,7 +128,7 @@ def main(_):
     # EQnA
     if not config.out_dir:
         config.out_dir = os.path.join(config.out_base_dir, config.model_name, time.strftime("%d-%m-%Y"))
-    
+    config.out_dir = 'out/EQnA/03-07-2017'
     print ('out dir = ' + config.out_dir)
 
     m(config)

@@ -111,7 +111,7 @@ class DataSet(object):
             batch_ds = DataSet(batch_data, self.data_type, shared=self.shared)
             yield batch_idxs, batch_ds
 
-    def get_multi_batches(self, batch_size, num_batches_per_step, num_steps=None, shuffle=False, cluster=False):
+    def get_multi_batches(self, batch_size, num_batches_per_step, num_steps=None, shuffle=False, cluster=False):# 10, 1, 203
         batch_size_per_step = batch_size * num_batches_per_step
         batches = self.get_batches(batch_size_per_step, num_batches=num_steps, shuffle=shuffle, cluster=cluster)
         multi_batches = (tuple(zip(grouper(idxs, batch_size, shorten=True, num_groups=num_batches_per_step),
