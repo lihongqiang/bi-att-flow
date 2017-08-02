@@ -23,18 +23,18 @@ class Submit(Base):
     id = Column(Integer(), primary_key=True)
     context = Column(String(255))
     question = Column(String(255))
-    answer = Column(String(255))
-    probability = Column(String(255))
+    bidaf = Column(String(255))
+    rnet = Column(String(255))
     num = Column(Integer())
     date = Column(DateTime())
 
-    def __init__(self, context, question, answer, probability, num):
+    def __init__(self, context, question, bidaf, rnet, num):
         self.context = context
         self.question = question
-        self.answer = answer
-        self.probability = probability
+        self.bidaf = bidaf
+        self.rnet = rnet
         self.num = num
         self.date = datetime.datetime.now()
 
     def __repr__(self):
-        return "context:`{}`\n question:`{}`\n answer:{}\n".format(self.context, self.question, self.answer)
+        return "context:`{}`\n question:`{}`\n bidaf:{}\n rnet:{}\n".format(self.context, self.question, self.bidaf, self.rnet)

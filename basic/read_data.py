@@ -43,7 +43,7 @@ class DataSet(object):
         self.data = data  # e.g. {'X': [0, 1, 2], 'Y': [2, 3, 4]}
         self.data_type = data_type
         self.shared = shared
-        total_num_examples = self.get_data_size()
+        total_num_examples = self.get_data_size() # q size
         self.valid_idxs = range(total_num_examples) if valid_idxs is None else valid_idxs
         self.num_examples = len(self.valid_idxs)
 
@@ -69,7 +69,7 @@ class DataSet(object):
             return self.data.get_by_idxs(idxs)
         raise Exception()
 
-    def get_batches(self, batch_size, num_batches=None, shuffle=False, cluster=False):
+    def get_batches(self, batch_size, num_batches=None, shuffle=False, cluster=False):  # 60  20000
         """
 
         :param batch_size:
@@ -78,7 +78,7 @@ class DataSet(object):
         :param cluster: cluster examples by their lengths; this might give performance boost (i.e. faster training).
         :return:
         """
-        num_batches_per_epoch = int(math.ceil(self.num_examples / batch_size))
+        num_batches_per_epoch = int(math.ceil(self.num_examples / batch_size)) # q_size / 60
         if num_batches is None:
             num_batches = num_batches_per_epoch
         num_epochs = int(math.ceil(num_batches / num_batches_per_epoch))
@@ -111,9 +111,11 @@ class DataSet(object):
             batch_ds = DataSet(batch_data, self.data_type, shared=self.shared)
             yield batch_idxs, batch_ds
 
-    def get_multi_batches(self, batch_size, num_batches_per_step, num_steps=None, shuffle=False, cluster=False):# 10, 1, 203
-        batch_size_per_step = batch_size * num_batches_per_step
-        batches = self.get_batches(batch_size_per_step, num_batches=num_steps, shuffle=shuffle, cluster=cluster)
+    # 产生batch
+    def get_multi_batches(self, batch_size, num_batches_per_step, num_steps=None, shuffle=False, cluster=False):# 60, 1, 20000
+        batch_size_per_step = batch_size * num_batches_per_step # 60 * 1
+        # 60 20000 
+        batches = self.get_batches(batch_size_per_step, num_batches=num_steps, shuffle=shuffle, cluster=cluster) # 20000
         multi_batches = (tuple(zip(grouper(idxs, batch_size, shorten=True, num_groups=num_batches_per_step),
                          data_set.divide(num_batches_per_step))) for idxs, data_set in batches)
         return multi_batches
@@ -163,7 +165,7 @@ def read_data(config, data_type, ref, data_filter=None):
     with open(shared_path, 'r') as fh:
         shared = json.load(fh)
 
-    num_examples = len(next(iter(data.values())))
+    num_examples = len(next(iter(data.values()))) # q size
     if data_filter is None:
         valid_idxs = range(num_examples)
     else:
@@ -201,6 +203,10 @@ def read_data(config, data_type, ref, data_filter=None):
         shared['word2idx'][UNK] = 1
         shared['char2idx'][NULL] = 0
         shared['char2idx'][UNK] = 1
+        
+        # 不懂在什么时候写了shared.json 这个文件
+        # print ('write json: ' + shared_path) 
+        
         json.dump({'word2idx': shared['word2idx'], 'char2idx': shared['char2idx']}, open(shared_path, 'w'))
     else:
         new_shared = json.load(open(shared_path, 'r'))
@@ -308,6 +314,24 @@ def update_config(config, data_sets):
     config.char_vocab_size = len(data_sets[0].shared['char2idx'])
     config.word_emb_size = len(next(iter(data_sets[0].shared['word2vec'].values())))
     config.word_vocab_size = len(data_sets[0].shared['word2idx'])
+
+    if config.single:
+        config.max_num_sents = 1
+    if config.squash:
+        config.max_sent_size = config.max_para_size
+        config.max_num_sents = 1
+
+def update_config_online(config):
+    config.max_num_sents = 8
+    config.max_sent_size = 178
+    config.max_ques_size = 30
+    config.max_word_size = 16
+    config.max_para_size = 178
+    config.max_word_size = min(config.max_word_size, config.word_size_th)
+
+    config.char_vocab_size = 162
+    config.word_emb_size = 8
+    config.word_vocab_size = 60
 
     if config.single:
         config.max_num_sents = 1

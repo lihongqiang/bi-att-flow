@@ -64,7 +64,9 @@ def _config_debug(config):
 
 def _train(config):
     data_filter = get_squad_data_filter(config)
+    print ('train config.load ', config.load)
     train_data = read_data(config, 'train', config.load, data_filter=data_filter)
+    print ('dev config.load ', config.load)
     dev_data = read_data(config, 'dev', True, data_filter=data_filter)
     update_config(config, [train_data, dev_data])
 
@@ -73,13 +75,40 @@ def _train(config):
     word2vec_dict = train_data.shared['lower_word2vec'] if config.lower_word else train_data.shared['word2vec']
     word2idx_dict = train_data.shared['word2idx']
     idx2vec_dict = {word2idx_dict[word]: vec for word, vec in word2vec_dict.items() if word in word2idx_dict}
+    
+    # word embedding
     emb_mat = np.array([idx2vec_dict[idx] if idx in idx2vec_dict
                         else np.random.multivariate_normal(np.zeros(config.word_emb_size), np.eye(config.word_emb_size))
                         for idx in range(config.word_vocab_size)])
     config.emb_mat = emb_mat
+    
+    if config.use_sentence_emb:
+        # set model config
+        config.use_char_emb = False
+        config.use_word_emb = False
+        config.highway = False
+        
+        # sentence embedding add
+        train_s2v = json.load(open(os.path.join(config.data_dir, "{}_sent_emb.json".format('train'))))
+        dev_s2v = json.load(open(os.path.join(config.data_dir, "{}_sent_emb.json".format('dev'))))
+        config.qvec = train_s2v['qvec'] + dev_s2v['qvec']
+        config.cvec = train_s2v['cvec'] + dev_s2v['cvec']
+        
+        train_data.shared['question2id'] = train_data.shared['q2id']
+        train_data.shared['context2id'] = train_data.shared['c2id']
+        dev_data.shared['question2id'] = dict()
+        dev_data.shared['context2id'] = dict()
+        
+        # dev offset 只增加一次
+        for key, val in dev_data.shared['q2id'].items():
+            dev_data.shared['question2id'][key] = val + len(train_s2v['qvec'])
+            
+        for key, val in dev_data.shared['c2id'].items():
+            dev_data.shared['context2id'][key] = val + len(train_s2v['cvec'])
+    
 
     # construct model graph and variables (using default graph)
-    pprint(config.__flags, indent=2)
+    # pprint(config.__flags, indent=2)
     models = get_multi_gpu_models(config)
     model = models[0]
     print("num params: {}".format(get_num_params()))
@@ -91,7 +120,7 @@ def _train(config):
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, gpu_options = tf.GPUOptions(allow_growth = True)))
     graph_handler.initialize(sess)
 
-    # Begin training
+    # Begin training  20000   q_size/(60 * 1) * 12
     num_steps = config.num_steps or int(math.ceil(train_data.num_examples / (config.batch_size * config.num_gpus))) * config.num_epochs
     global_step = 0
     for batches in tqdm(train_data.get_multi_batches(config.batch_size, config.num_gpus,
@@ -145,7 +174,7 @@ def _test(config):
         new_emb_mat = np.array([idx2vec_dict[idx] for idx in range(len(idx2vec_dict))], dtype='float32')
         config.new_emb_mat = new_emb_mat
 
-    pprint(config.__flags, indent=2)
+    # pprint(config.__flags, indent=2)
     models = get_multi_gpu_models(config)
     model = models[0]
     evaluator = MultiGPUF1Evaluator(config, models, tensor_dict=models[0].tensor_dict if config.vis else None)

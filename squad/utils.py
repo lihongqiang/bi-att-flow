@@ -99,7 +99,7 @@ def get_best_span(ypi, yp2i):  # 获取一个片段（pi, pj+1），pi = max(p0,
                 max_val = val1 * val2
     return ((best_sent_idx, best_word_span[0]), (best_sent_idx, best_word_span[1] + 1)), float(max_val)
 
-def get_best_span_topk(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大
+def get_best_span_topk(ypi, yp2i, k):  # 获取一个片段（pi, pj+1），pi = max(p0, pj), socre=pi*pj最大，可能有交叉
     topk_sent_word_span = list()
     
     for f, (ypif, yp2if) in enumerate(zip(ypi, yp2i)):   # [M, JX]
@@ -251,7 +251,8 @@ def get_best_span_topk_nocover_fraction(ypi, yp2i, k):  # 获取一个片段（p
                     tmp_span.append([[(f, argmax_j1), (f, j + 1)], val1 * val2])
                 else:
                     argmax_j1 = -1
-
+        if total_passage_if < 1e-8 or total_passage_2if < 1e-8:
+            break
         tmp_span.sort(key=lambda x: x[1], reverse=True)
         topk_sent_word_span.append([tmp_span[0][0], '%.4f' % (tmp_span[0][1]/total_passage_if/total_passage_2if)])
        

@@ -71,15 +71,15 @@ flags.DEFINE_integer("char_emb_size", 8, "Char emb size [8]")
 flags.DEFINE_string("out_channel_dims", "100", "Out channel dims of Char-CNN, separated by commas [100]")
 flags.DEFINE_string("filter_heights", "5", "Filter heights of Char-CNN, separated by commas [5]")
 flags.DEFINE_bool("finetune", False, "Finetune word embeddings? [False]")
-
+flags.DEFINE_bool("highway", True, "Use highway? [True]")
 flags.DEFINE_integer("highway_num_layers", 2, "highway num layers [2]")
 flags.DEFINE_bool("share_cnn_weights", True, "Share Char-CNN weights [True]")
 flags.DEFINE_bool("share_lstm_weights", True, "Share pre-processing (phrase-level) LSTM weights [True]")
 flags.DEFINE_float("var_decay", 0.999, "Exponential moving average decay for variables [0.999]")
 
 # Optimizations
-flags.DEFINE_bool("cluster", False, "Cluster data for faster training [False]")
-flags.DEFINE_bool("len_opt", False, "Length optimization? [False]")
+flags.DEFINE_bool("cluster", True, "Cluster data for faster training [False]")
+flags.DEFINE_bool("len_opt", True, "Length optimization? [False]")
 flags.DEFINE_bool("cpu_opt", False, "CPU optimization? GPU computation can be slower [False]")
 
 # Logging and saving options
@@ -88,7 +88,7 @@ flags.DEFINE_integer("log_period", 100, "Log period [100]")
 flags.DEFINE_integer("eval_period", 1000, "Eval period [1000]")
 flags.DEFINE_integer("save_period", 1000, "Save Period [1000]")
 flags.DEFINE_integer("max_to_keep", 20, "Max recent saves to keep [20]")
-flags.DEFINE_bool("dump_eval", True, "dump eval? [True]")
+flags.DEFINE_bool("dump_eval", False, "dump eval? [True]")
 flags.DEFINE_bool("dump_answer", True, "dump answer? [True]")
 flags.DEFINE_bool("vis", False, "output visualization numbers? [False]")
 flags.DEFINE_bool("dump_pickle", True, "Dump pickle instead of json? [True]")
@@ -114,41 +114,110 @@ flags.DEFINE_string("logit_func", "tri_linear", "logit func [tri_linear]")
 flags.DEFINE_string("answer_func", "linear", "answer logit func [linear]")
 flags.DEFINE_string("sh_logit_func", "tri_linear", "sh logit func [tri_linear]")
 
-
-# Ablation options 
+# Ablation options
+flags.DEFINE_bool("use_char_emb", True, "use char emb? [True]")
+flags.DEFINE_bool("use_word_emb", True, "use word embedding? [True]")
 flags.DEFINE_bool("q2c_att", True, "question-to-context attention? [True]")
 flags.DEFINE_bool("c2q_att", True, "context-to-question attention? [True]")
 flags.DEFINE_bool("dynamic_att", False, "Dynamic attention [False]")
-
-# Ablation options 
-flags.DEFINE_bool("use_char_emb", True, "use char emb? [True]")
-flags.DEFINE_bool("use_word_emb", True, "use word embedding? [True]")
-flags.DEFINE_bool("highway", True, "Use highway? [True]")
-
-# addition 
-flags.DEFINE_bool("use_sentence_emb", False, "use sentence emb? [True]")
-flags.DEFINE_integer("sent_dim", 600, "sentence emb dim")
-
-# add pretrained word2vec
-
-
-def main(_):
-    config = flags.FLAGS
-
-    # change out dir
-    # config.out_dir = os.path.join(config.out_base_dir, config.model_name, str(config.run_id).zfill(2)  )
     
-    # EQnA train
-    if not config.out_dir:
-        if config.sentece_token:
-            config.out_dir = os.path.join(config.out_base_dir, config.model_name, "sent_token", time.strftime("%d-%m-%Y"))
-        else:
-            config.out_dir = os.path.join(config.out_base_dir, config.model_name, "no_sent_token", time.strftime("%d-%m-%Y"))
-    else: # test
-        config.out_dir = 'out/EQnA/03-07-2017'
-    print ('out dir = ' + config.out_dir)
+import argparse
+import json
+import math
+import os
+import shutil
+from pprint import pprint
 
-    m(config)
+import tensorflow as tf
+from tqdm import tqdm
+import numpy as np
 
-if __name__ == "__main__":
-    tf.app.run()
+from basic.evaluator import ForwardEvaluator, MultiGPUF1Evaluator
+from basic.graph_handler import GraphHandler
+from basic.model import get_multi_gpu_models
+from basic.trainer import MultiGPUTrainer
+from basic.read_data import read_data, get_squad_data_filter, update_config, update_config_online
+from my.tensorflow import get_num_params
+
+class OlineTest():
+    
+    def __init__(self, out_dir):
+        config = flags.FLAGS
+        config.online = True
+        config.out_dir = out_dir
+        config.mode = 'test'
+        self.set_dirs(config)
+        print ('out dir = ' + config.out_dir)
+        
+        
+        update_config_online(config)
+        models = get_multi_gpu_models(config)
+        self.model = models[0]
+        self.evaluator = MultiGPUF1Evaluator(config, models, tensor_dict=models[0].tensor_dict if config.vis else None)
+        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, gpu_options = tf.GPUOptions(allow_growth = True)))
+        self.graph_handler = GraphHandler(config, self.model)
+        
+        self.graph_handler.initialize(self.sess)
+        
+        
+    def main(self, data_dir, ans_num):
+        config = flags.FLAGS
+        config.data_dir = data_dir
+        config.topk = ans_num
+        config.answer_dir = data_dir
+        with tf.device(config.device):
+            self._test(config)
+
+
+    def set_dirs(self, config):
+
+        config.save_dir = os.path.join(config.out_dir, "save")
+        config.log_dir = os.path.join(config.out_dir, "log")
+        config.eval_dir = os.path.join(config.out_dir, "eval")
+        config.answer_dir = os.path.join(config.out_dir, "answer")
+        if not os.path.exists(config.out_dir):
+            os.makedirs(config.out_dir)
+        if not os.path.exists(config.save_dir):
+            os.mkdir(config.save_dir)
+        if not os.path.exists(config.log_dir):
+            os.mkdir(config.log_dir)
+        if not os.path.exists(config.answer_dir):
+            os.mkdir(config.answer_dir)
+        if not os.path.exists(config.eval_dir):
+            os.mkdir(config.eval_dir)
+
+
+    def _test(self, config):
+        test_data = read_data(config, 'online', True)
+        #update_config(config, [test_data])
+
+        if config.use_glove_for_unk:
+            word2vec_dict = test_data.shared['lower_word2vec'] if config.lower_word else test_data.shared['word2vec']
+            new_word2idx_dict = test_data.shared['new_word2idx']
+            idx2vec_dict = {idx: word2vec_dict[word] for word, idx in new_word2idx_dict.items()}
+            new_emb_mat = np.array([idx2vec_dict[idx] for idx in range(len(idx2vec_dict))], dtype='float32')
+            config.new_emb_mat = new_emb_mat
+
+        pprint(config.__flags, indent=2)
+        num_steps = math.ceil(1.0 * test_data.num_examples / (config.batch_size * config.num_gpus)) # 2021 / 10 = 203
+
+        # 这个地方可以自己设置test的num batch，就是不测试所有的batch，一般小于总大小
+        if 0 < config.test_num_batches < num_steps:
+            num_steps = config.test_num_batches
+
+        e = None
+        for multi_batch in tqdm(test_data.get_multi_batches(config.batch_size, config.num_gpus, num_steps=num_steps, cluster=config.cluster), total=num_steps):
+            ei = self.evaluator.get_evaluation(self.sess, multi_batch)
+            e = ei if e is None else e + ei
+            if config.vis:
+                eval_subdir = os.path.join(config.eval_dir, "{}-{}".format(ei.data_type, str(ei.global_step).zfill(6)))
+                if not os.path.exists(eval_subdir):
+                    os.mkdir(eval_subdir)
+                path = os.path.join(eval_subdir, str(ei.idxs[0]).zfill(8))
+                self.graph_handler.dump_eval(ei, path=path)
+        print(e)
+        if config.dump_answer:
+            print("dumping answer ...")
+            graph_handler.dump_answer(e)
+
+

@@ -139,13 +139,6 @@ def main(_):
     # config.out_dir = os.path.join(config.out_base_dir, config.model_name, str(config.run_id).zfill(2)  )
     
     # EQnA train
-    if not config.out_dir:
-        if config.sentece_token:
-            config.out_dir = os.path.join(config.out_base_dir, config.model_name, "sent_token", time.strftime("%d-%m-%Y"))
-        else:
-            config.out_dir = os.path.join(config.out_base_dir, config.model_name, "no_sent_token", time.strftime("%d-%m-%Y"))
-    else: # test
-        config.out_dir = 'out/EQnA/03-07-2017'
     print ('out dir = ' + config.out_dir)
 
     m(config)

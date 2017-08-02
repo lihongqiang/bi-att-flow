@@ -5,7 +5,7 @@ from basic.read_data import DataSet
 from my.nltk_utils import span_f1
 from my.tensorflow import padded_reshape
 from my.utils import argmax
-from squad.utils import get_phrase, get_best_span, get_best_span_wy, get_best_span_topk_nocover_softmax
+from squad.utils import get_phrase, get_best_span, get_best_span_wy, get_best_span_topk_nocover_fraction
 
 
 class Evaluation(object):
@@ -289,7 +289,7 @@ class F1Evaluator(LabeledEvaluator):
             if self.config.topk == 0:
                 spans, scores = zip(*[get_best_span(ypi, yp2i) for ypi, yp2i in zip(yp, yp2)])
             else:
-                spans, scores = zip(*[get_best_span_topk_nocover_softmax(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
+                spans, scores = zip(*[get_best_span_topk_nocover_fraction(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
 
         def _get(xi, span):
             if len(xi) <= span[0][0]:

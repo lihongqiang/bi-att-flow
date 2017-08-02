@@ -11,6 +11,7 @@ from my.tensorflow.nn import softsel, get_logits, highway_network, multi_conv1d
 from my.tensorflow.rnn import bidirectional_dynamic_rnn
 from my.tensorflow.rnn_cell import SwitchableDropoutWrapper, AttentionCell
 
+import hashlib
 
 def get_multi_gpu_models(config):
     models = []
@@ -46,6 +47,10 @@ class Model(object):
         self.is_train = tf.placeholder('bool', [], name='is_train')
         self.new_emb_mat = tf.placeholder('float', [None, config.word_emb_size], name='new_emb_mat')
         self.na = tf.placeholder('bool', [N], name='na')
+        
+        # sentece embedding
+        self.c2vecid = tf.placeholder('int32', [N, None, None], name='c2vecid') # [N, 1, 1]
+        self.q2vecid = tf.placeholder('int32', [N, None], name='q2vecid')# [N, 1]
 
         # Define misc
         self.tensor_dict = {}
@@ -71,6 +76,10 @@ class Model(object):
         self.summary = tf.summary.merge(tf.get_collection("summaries", scope=self.scope))
 
     def _build_forward(self):
+        
+        ####################
+        ## embedding module
+        ####################
         config = self.config
         N, M, JX, JQ, VW, VC, d, W = \
             config.batch_size, config.max_num_sents, config.max_sent_size, \
@@ -89,12 +98,12 @@ class Model(object):
                 with tf.variable_scope("char"):
                     Acx = tf.nn.embedding_lookup(char_emb_mat, self.cx)  # [N, M, JX, W, dc]
                     Acq = tf.nn.embedding_lookup(char_emb_mat, self.cq)  # [N, JQ, W, dc]
-                    Acx = tf.reshape(Acx, [-1, JX, W, dc])
+                    Acx = tf.reshape(Acx, [-1, JX, W, dc]) # [-1, word_cnt, 16, 8]
                     Acq = tf.reshape(Acq, [-1, JQ, W, dc])
 
-                    filter_sizes = list(map(int, config.out_channel_dims.split(',')))
-                    heights = list(map(int, config.filter_heights.split(',')))
-                    assert sum(filter_sizes) == dco, (filter_sizes, dco)
+                    filter_sizes = list(map(int, config.out_channel_dims.split(','))) # [100]
+                    heights = list(map(int, config.filter_heights.split(','))) # [5]
+                    assert sum(filter_sizes) == dco, (filter_sizes, dco) # 100
                     with tf.variable_scope("conv"):
                         xx = multi_conv1d(Acx, filter_sizes, heights, "VALID",  self.is_train, config.keep_prob, scope="xx")
                         if config.share_cnn_weights:
@@ -104,11 +113,13 @@ class Model(object):
                             qq = multi_conv1d(Acq, filter_sizes, heights, "VALID", self.is_train, config.keep_prob, scope="qq")
                         xx = tf.reshape(xx, [-1, M, JX, dco])
                         qq = tf.reshape(qq, [-1, JQ, dco])
-
+            
+            # 替换1
             if config.use_word_emb:
                 with tf.variable_scope("emb_var"), tf.device("/cpu:0"):
                     if config.mode == 'train':
-                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat))
+                        # 默认可以重新训练，这里默认设置重新训练
+                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat), trainable=False)
                     else:
                         word_emb_mat = tf.get_variable("word_emb_mat", shape=[VW, dw], dtype='float')
                     if config.use_glove_for_unk:
@@ -133,10 +144,10 @@ class Model(object):
                 tf.get_variable_scope().reuse_variables()
                 qq = highway_network(qq, config.highway_num_layers, True, wd=config.wd, is_train=self.is_train)
 
-        self.tensor_dict['xx'] = xx
-        self.tensor_dict['qq'] = qq
+            self.tensor_dict['xx'] = xx
+            self.tensor_dict['qq'] = qq
 
-        cell_fw = BasicLSTMCell(d, state_is_tuple=True, reuse=tf.get_variable_scope().reuse)
+        cell_fw = BasicLSTMCell(d, state_is_tuple=True, reuse=tf.get_variable_scope().reuse) # hidden size
         cell_bw = BasicLSTMCell(d, state_is_tuple=True, reuse=tf.get_variable_scope().reuse)
         d_cell_fw = SwitchableDropoutWrapper(cell_fw, self.is_train, input_keep_prob=config.input_keep_prob)
         d_cell_bw = SwitchableDropoutWrapper(cell_bw, self.is_train, input_keep_prob=config.input_keep_prob)
@@ -155,21 +166,44 @@ class Model(object):
         x_len = tf.reduce_sum(tf.cast(self.x_mask, 'int32'), 2)  # [N, M]
         q_len = tf.reduce_sum(tf.cast(self.q_mask, 'int32'), 1)  # [N]
 
-        with tf.variable_scope("prepro"):
-            (fw_u, bw_u), ((_, fw_u_f), (_, bw_u_f)) = bidirectional_dynamic_rnn(d_cell_fw, d_cell_bw, qq, q_len, dtype='float', scope='u1')  # [N, J, d], [N, d]
-            u = tf.concat(axis=2, values=[fw_u, bw_u])
-            if config.share_lstm_weights:
-                tf.get_variable_scope().reuse_variables()
-                (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='u1')  # [N, M, JX, 2d]
-                h = tf.concat(axis=3, values=[fw_h, bw_h])  # [N, M, JX, 2d]
-            else:
-                (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='h1')  # [N, M, JX, 2d]
-                h = tf.concat(axis=3, values=[fw_h, bw_h])  # [N, M, JX, 2d]
+        # 替换2
+        if config.use_sentence_emb:
+            # JX = 1
+            # JQ = 1
+            # M = 1
+            QW, CW, sw = len(config.qvec), len(config.cvec), config.sent_dim
+            with tf.variable_scope("sent_emb_var"), tf.device("/cpu:0"):
+                if config.mode == 'train':
+                    q_emb_mat = tf.get_variable("q_emb_mat", dtype='float', shape=[QW, sw], initializer=get_initializer(config.qvec))
+                    c_emb_mat = tf.get_variable("c_emb_mat", dtype='float', shape=[CW, sw], initializer=get_initializer(config.cvec))
+                else:
+                    q_emb_mat = tf.get_variable("q_emb_mat", dtype='float', shape=[QW, sw])
+                    c_emb_mat = tf.get_variable("c_emb_mat", dtype='float', shape=[CW, sw])
+                    
+            u = tf.nn.embedding_lookup(q_emb_mat, self.q2vecid)  # [N, 1] -> [N, 1, 600]        
+            h = tf.nn.embedding_lookup(c_emb_mat, self.c2vecid)  # [N, M, 1] -> [N, M, 1, 600]    
+            
             self.tensor_dict['u'] = u
             self.tensor_dict['h'] = h
-
+        else:
+            with tf.variable_scope("prepro"):
+                (fw_u, bw_u), ((_, fw_u_f), (_, bw_u_f)) = bidirectional_dynamic_rnn(d_cell_fw, d_cell_bw, qq, q_len, dtype='float', scope='u1')  # [N, J, d], [N, d]
+                u = tf.concat(axis=2, values=[fw_u, bw_u])# [N, JX, 2d]
+                if config.share_lstm_weights:
+                    tf.get_variable_scope().reuse_variables()
+                    (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='u1')  # [N, M, JX, 2d]
+                    h = tf.concat(axis=3, values=[fw_h, bw_h])  # [N, M, JX, 2d]
+                else:
+                    (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='h1')  # [N, M, JX, 2d]
+                    h = tf.concat(axis=3, values=[fw_h, bw_h])  # [N, M, JX, 2d]  context sentence word word_dim
+                self.tensor_dict['u'] = u
+                self.tensor_dict['h'] = h
+            
+        ################
+        ## answer module
+        ################
         with tf.variable_scope("main"):
-            if config.dynamic_att:
+            if config.dynamic_att: # Dynamic attention
                 p0 = h
                 u = tf.reshape(tf.tile(tf.expand_dims(u, 1), [1, M, 1, 1]), [N * M, JQ, 2 * d])
                 q_mask = tf.reshape(tf.tile(tf.expand_dims(self.q_mask, 1), [1, M, 1]), [N * M, JQ])
@@ -182,7 +216,13 @@ class Model(object):
                 second_cell_bw = AttentionCell(cell3_bw, u, mask=q_mask, mapper='sim',
                                                input_keep_prob=self.config.input_keep_prob, is_train=self.is_train)
             else:
-                p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0", tensor_dict=self.tensor_dict)
+                # u [N, 1, 600] 
+                # h [N, M, 1, 600]  
+                # p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0", tensor_dict=self.tensor_dict)
+                if config.use_sentence_emb:
+                    p0 = attention_layer(config, self.is_train, h, u, h_mask=None, u_mask=None, scope="p0", tensor_dict=self.tensor_dict)
+                else:
+                    p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0", tensor_dict=self.tensor_dict)
                 first_cell_fw = d_cell2_fw
                 second_cell_fw = d_cell3_fw
                 first_cell_bw = d_cell2_bw
@@ -210,7 +250,7 @@ class Model(object):
             flat_logits2 = tf.reshape(logits2, [-1, M * JX])
             flat_yp2 = tf.nn.softmax(flat_logits2)
 
-            if config.na:
+            if config.na: # Enable no answer strategy and learn bias?
                 na_bias = tf.get_variable("na_bias", shape=[], dtype='float')
                 na_bias_tiled = tf.tile(tf.reshape(na_bias, [1, 1]), [N, 1])  # [N, 1]
                 concat_flat_logits = tf.concat(axis=1, values=[na_bias_tiled, flat_logits])
@@ -245,7 +285,12 @@ class Model(object):
         JX = tf.shape(self.x)[2]
         M = tf.shape(self.x)[1]
         JQ = tf.shape(self.q)[1]
-
+        
+        if config.use_sentence_emb:
+            JX = 1
+            M = 1
+            JQ = 1
+        
         loss_mask = tf.reduce_max(tf.cast(self.q_mask, 'float'), 1)
         if config.wy:
             losses = tf.nn.sigmoid_cross_entropy_with_logits(
@@ -470,6 +515,39 @@ class Model(object):
         if supervised:
             assert np.sum(~(x_mask | ~wy)) == 0
 
+        # q2vecid, c2vecid
+        if config.use_sentence_emb:
+            def getHashCode(context):
+                hash = hashlib.md5()
+                hash.update(context.encode('utf-8'))
+                return hash.hexdigest()
+            def _get_context(sent):
+                d = batch.shared['context2id'] # hashid -> id
+                return d[getHashCode(sent)]
+
+            def _get_question(sent):
+                d = batch.shared['question2id'] # hashid -> id
+                return d[getHashCode(sent)]
+
+            c2vecid = np.zeros([N, 1, 1], dtype='int32') # [N, 1, 1]
+            q2vecid = np.zeros([N, 1], dtype='int32') # [N, 1]
+            feed_dict[self.c2vecid] = c2vecid
+            feed_dict[self.q2vecid] = q2vecid
+
+            for i, xi in enumerate(X):
+                for j, xij in enumerate(xi):
+                    c2vecid[i,j] = [_get_context(' '.join(xij))]
+
+            for i, qi in enumerate(batch.data['q']):
+                q2vecid[i] = [_get_question(' '.join(qi))]
+                
+            # q_mask x_mask
+            # q_mask = np.ones([N, 1], dtype='bool')
+            # feed_dict[self.q_mask] = q_mask
+            
+            # x_mask = np.ones([N, 1, 1], dtype='bool')
+            # feed_dict[self.x_mask] = x_mask
+        
         return feed_dict
 
 
@@ -504,7 +582,8 @@ def bi_attention(config, is_train, h, u, h_mask=None, u_mask=None, scope=None, t
 
         return u_a, h_a
 
-
+# u [N, 1, 600] 
+# h [N, M, 1, 600]  
 def attention_layer(config, is_train, h, u, h_mask=None, u_mask=None, scope=None, tensor_dict=None):
     with tf.variable_scope(scope or "attention_layer"):
         JX = tf.shape(h)[2]

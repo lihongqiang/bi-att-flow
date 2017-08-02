@@ -4,19 +4,24 @@ import hashlib
 import json
 import os
 import time
-
+import requests
 import sys
 sys.path.append('/home/t-honli/bi-att-flow')
 
 from squad.prepro_class import PreproClass
+from basic.OlineServer import OlineTest
 
 ISOTIMEFORMAT='%Y-%m-%d %X'
 
+import gevent
 
 class ServeClass():
     
     def __init__(self):
+        #self.OlineTest = OlineTest(out_dir='/home/t-honli/bi-att-flow/out/EQnA/03-07-2017')
         self.prepro = PreproClass()
+        self.AnswerByBiDAF = list()
+        self.AnswerByRNet = list()
 
     def generateJson(self, context, query, answer=""):
         online_data = pd.DataFrame({"Query":query, "Context":context, "phrase":answer}, columns=["Query", "Context", "phrase"], index=[0])
@@ -110,6 +115,14 @@ class ServeClass():
         ans_num = num
         out_dir = 'out/EQnA/03-07-2017'
         os.system("python -m basic.cli --len_opt --cluster --dump_eval=False --data_dir={} --online=True --topk={} --out_dir={} --answer_dir={}".format(data_dir, ans_num, out_dir, answer_dir))
+    
+    def testDataOline(self, num, file_path):
+        # test data  python -m basic.cli --len_opt --cluster --data_dir=data/online --online=True
+        file_name = file_path.split('/')[-1]
+        data_dir = os.path.join('/home/t-honli/bi-att-flow/data/online', file_name.split('.')[0])
+        ans_num = num
+        self.OlineTest.main(data_dir, ans_num)
+        
 
     # show answer
     def showAnswer(self, file_name):
@@ -120,15 +133,41 @@ class ServeClass():
         answer_list = []
         for key,val in list(answer.items()):
             if key != 'scores':
-                phrases = val.split('|')
-                scores = answer['scores'][key].split('|')
+                phrases = val.split('|||')
+                scores = answer['scores'][key].split('|||')
                 cnt = 1
                 for phrase, score in zip(phrases, scores):
-                    print (cnt, phrase, score)
+                    # print (cnt, phrase, score)
                     answer_list.append([cnt, phrase, score])
                     cnt += 1
         return answer_list
+    
+    def getAnswerByRNet(self, context, question, num):
+        payload = {
+            "context":context,
+            "question":question,
+            "num":num
+        }
+        try:
+            r = requests.post("http://10.172.126.49:5000/demo", data=payload, timeout=50)
+        except:
+            print ('rnet network error.')
+            answer_list = []
+            self.AnswerByRNet = answer_list
+            return answer_list
+        
+        answer = json.loads(r.text)['answer']
+        answer_list = []
+        phrases = answer.split('|||')
+        cnt = 1
+        for phrase in phrases:
+            ans, score = phrase.split(':::')
+            answer_list.append([cnt, ans, score])
+            cnt += 1
 
+        self.AnswerByRNet = answer_list
+        return answer_list    
+        
     def getAnswerPhrase(self, context, query, num, answer=" "):
         
         # change workspace
@@ -136,20 +175,35 @@ class ServeClass():
         os.chdir(work_dir)
         
         # <1s
-        print ('build json', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
+        # print ('build json', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
         file_path = self.generateJson(context, query, answer)
 
         # <1s search twice glove for word embedding
-        print ('build data', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
+        # print ('build data', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
         # self.preproJson()
         self.prepro.prepro_online(file_path)
 
         # 12s run the model in GPU
         print ('tets data', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
         self.testData(num, file_path)
+        #self.testDataOline(num, file_path)
 
         # <1s
-        print ('show data', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
+        #print ('show data', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
         ans = self.showAnswer(file_path)
         print ('finish ', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
+        
+        self.AnswerByBiDAF = ans
         return ans
+    
+    def getAllAnswer(self, context, question, num, answer=" "):
+        # self.getAnswerByRNet(context, question, num)
+        # self.getAnswerPhrase(context, question, num, answer)
+        # print (self.AnswerByBiDAF)
+        # print (self.AnswerByRNet)
+        print ('getAllAnswer start', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
+        thread1 = gevent.spawn(self.getAnswerByRNet, context, question, num)
+        thread2 = gevent.spawn(self.getAnswerPhrase, context, question, num, answer)
+        gevent.joinall([thread1, thread2])
+        print ('getAllAnswer end', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
+        return self.AnswerByBiDAF, self.AnswerByRNet

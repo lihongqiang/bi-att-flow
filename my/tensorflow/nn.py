@@ -154,10 +154,10 @@ def highway_network(arg, num_layers, bias, bias_start=0.0, scope=None, wd=0.0, i
         return cur
 
 
-def conv1d(in_, filter_size, height, padding, is_train=None, keep_prob=1.0, scope=None):
+def conv1d(in_, filter_size, height, padding, is_train=None, keep_prob=1.0, scope=None): # 100 5
     with tf.variable_scope(scope or "conv1d"):
         num_channels = in_.get_shape()[-1]
-        filter_ = tf.get_variable("filter", shape=[1, height, num_channels, filter_size], dtype='float')
+        filter_ = tf.get_variable("filter", shape=[1, height, num_channels, filter_size], dtype='float') # [1, 5, 8, 100]
         bias = tf.get_variable("bias", shape=[filter_size], dtype='float')
         strides = [1, 1, 1, 1]
         if is_train is not None and keep_prob < 1.0:
@@ -167,7 +167,7 @@ def conv1d(in_, filter_size, height, padding, is_train=None, keep_prob=1.0, scop
         return out
 
 
-def multi_conv1d(in_, filter_sizes, heights, padding, is_train=None, keep_prob=1.0, scope=None):
+def multi_conv1d(in_, filter_sizes, heights, padding, is_train=None, keep_prob=1.0, scope=None): # 100 5 VALID
     with tf.variable_scope(scope or "multi_conv1d"):
         assert len(filter_sizes) == len(heights)
         outs = []
