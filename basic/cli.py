@@ -6,7 +6,7 @@ from basic.main import main as m
 
 import os
 import time
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 flags = tf.app.flags
 
@@ -59,7 +59,7 @@ flags.DEFINE_integer("batch_size", 60, "Batch size [60]")
 flags.DEFINE_integer("val_num_batches", 100, "validation num batches [100]")
 flags.DEFINE_integer("test_num_batches", 0, "test num batches [0]")
 flags.DEFINE_integer("num_epochs", 12, "Total number of epochs for training [12]")
-flags.DEFINE_integer("num_steps", 20000, "Number of steps [20000]")
+flags.DEFINE_integer("num_steps", 30000, "Number of steps [20000]")
 
 flags.DEFINE_float("init_lr", 0.001, "Initial learning rate [0.001]")
 flags.DEFINE_float("input_keep_prob", 0.8, "Input keep prob for the dropout of LSTM weights [0.8]")
@@ -144,8 +144,6 @@ def main(_):
             config.out_dir = os.path.join(config.out_base_dir, config.model_name, "sent_token", time.strftime("%d-%m-%Y"))
         else:
             config.out_dir = os.path.join(config.out_base_dir, config.model_name, "no_sent_token", time.strftime("%d-%m-%Y"))
-    else: # test
-        config.out_dir = 'out/EQnA/03-07-2017'
     print ('out dir = ' + config.out_dir)
 
     m(config)

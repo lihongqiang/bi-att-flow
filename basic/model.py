@@ -7,7 +7,7 @@ from tensorflow.contrib.rnn import BasicLSTMCell
 
 from basic.read_data import DataSet
 from my.tensorflow import get_initializer
-from my.tensorflow.nn import softsel, get_logits, highway_network, multi_conv1d
+from my.tensorflow.nn import softsel, get_logits, highway_network, multi_conv1d, gate_layer
 from my.tensorflow.rnn import bidirectional_dynamic_rnn
 from my.tensorflow.rnn_cell import SwitchableDropoutWrapper, AttentionCell
 
@@ -119,7 +119,7 @@ class Model(object):
                 with tf.variable_scope("emb_var"), tf.device("/cpu:0"):
                     if config.mode == 'train':
                         # 默认可以重新训练，这里默认设置重新训练
-                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat), trainable=False)
+                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat))
                     else:
                         word_emb_mat = tf.get_variable("word_emb_mat", shape=[VW, dw], dtype='float')
                     if config.use_glove_for_unk:
@@ -144,8 +144,8 @@ class Model(object):
                 tf.get_variable_scope().reuse_variables()
                 qq = highway_network(qq, config.highway_num_layers, True, wd=config.wd, is_train=self.is_train)
 
-            self.tensor_dict['xx'] = xx
-            self.tensor_dict['qq'] = qq
+        self.tensor_dict['xx'] = xx
+        self.tensor_dict['qq'] = qq
 
         cell_fw = BasicLSTMCell(d, state_is_tuple=True, reuse=tf.get_variable_scope().reuse) # hidden size
         cell_bw = BasicLSTMCell(d, state_is_tuple=True, reuse=tf.get_variable_scope().reuse)
@@ -550,7 +550,8 @@ class Model(object):
         
         return feed_dict
 
-
+# u [N, JQ, 2d] 
+# h [N, M, JX, 2d]  
 def bi_attention(config, is_train, h, u, h_mask=None, u_mask=None, scope=None, tensor_dict=None):
     with tf.variable_scope(scope or "bi_attention"):
         JX = tf.shape(h)[2]
@@ -567,9 +568,19 @@ def bi_attention(config, is_train, h, u, h_mask=None, u_mask=None, scope=None, t
 
         u_logits = get_logits([h_aug, u_aug], None, True, wd=config.wd, mask=hu_mask,
                               is_train=is_train, func=config.logit_func, scope='u_logits')  # [N, M, JX, JQ]
+        
+        # [u_logits, h, u] -> u_logits
+        # u_logits [N, M, JX, JQ]
+        # u [N, JQ, d]
+        
         u_a = softsel(u_aug, u_logits)  # [N, M, JX, d]
+        
         h_a = softsel(h, tf.reduce_max(u_logits, 3))  # [N, M, d]
         h_a = tf.tile(tf.expand_dims(h_a, 2), [1, 1, JX, 1])
+        
+        # add sum
+        # h_a_sum = softsel(h, tf.reduce_sum(u_logits, 3))  # [N, M, d]
+        # h_a_sum = tf.tile(tf.expand_dims(h_a_sum, 2), [1, 1, JX, 1])
 
         if tensor_dict is not None:
             a_u = tf.nn.softmax(u_logits)  # [N, M, JX, JQ]
@@ -582,8 +593,8 @@ def bi_attention(config, is_train, h, u, h_mask=None, u_mask=None, scope=None, t
 
         return u_a, h_a
 
-# u [N, 1, 600] 
-# h [N, M, 1, 600]  
+# u [N, JQ, 600] 
+# h [N, M, JX, 600]  
 def attention_layer(config, is_train, h, u, h_mask=None, u_mask=None, scope=None, tensor_dict=None):
     with tf.variable_scope(scope or "attention_layer"):
         JX = tf.shape(h)[2]
@@ -595,6 +606,11 @@ def attention_layer(config, is_train, h, u, h_mask=None, u_mask=None, scope=None
             u_a = tf.tile(tf.expand_dims(tf.expand_dims(tf.reduce_mean(u, 1), 1), 1), [1, M, JX, 1])
         if config.q2c_att:
             p0 = tf.concat(axis=3, values=[h, u_a, h * u_a, h * h_a])
+            # p0 = gate_layer(p0, True, wd=config.wd, is_train=is_train) train bad
+            
+            # p0 = tf.concat(axis=3, values=[h, u_a, h * u_a, h * h_a, h * h_a_sum]) train bad
+            # p0 = tf.concat(axis=3, values=[h, u_a, h_a]) # train bad
+            # p0 = tf.concat(axis=3, values=[h, u_a, h_a, h * u_a, h * h_a]) # train bad
         else:
             p0 = tf.concat(axis=3, values=[h, u_a, h * u_a])
         return p0

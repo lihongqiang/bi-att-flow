@@ -1,0 +1,94 @@
+{% extends "navbar.html" %}
+
+{% block content %}
+
+<div class="container">
+    <div class="page-header">
+        <h2>Example</h2>
+        <p><a href="http://10.190.190.137:5000/example/209">(EQnA) Afghanistan girl shot in the head</a></p>
+        <p><a href="http://10.190.190.137:5000/example/210">(EQnA) American percentage of cell phone usage</a></p>
+        <p><a href="http://10.190.190.137:5000/example/211">(EQnA) Average age in united states by year</a></p>
+        <p><a href="http://10.190.190.137:5000/example/206">(SQuAD) Which NFL team represented the AFC at Super Bowl 50?</a></p>
+        <p><a href="http://10.190.190.137:5000/example/207">(SQuAD) Which Carolina Panthers player was named Most Valuable Player?</a></p>
+        <p><a href="http://10.190.190.137:5000/example/208">(SQuAD) Which network broadcasted Super Bowl 50 in the U.S.?</a></p>
+        <p><a href="http://10.190.190.137:5000/example/197">(Wiki) The Great Wall</a></p>
+        <p><a href="http://10.190.190.137:5000/example/191">(Wiki) The Soap Made Time</a></p>
+    </div>
+</div>
+
+<div class="container">
+
+<div class="control-group">
+  <label class="control-group" for="inputContext">context</label>
+  <div class="controls" >
+  	<textarea rows="5" type="text" id="context" name="context" class="form-control" aria-describedby="basic-addon1">{{ data.context }}</textarea>
+  </div>
+</div>
+
+<div class="control-group">
+  <label class="control-label" for="inputQuestion">question</label>
+  <div class="controls">
+  	<textarea rows="1" type="text" id="question" name="question" class="form-control"  aria-describedby="basic-addon1" >{{ data.question }}</textarea>
+  </div>
+</div> 
+
+<div class="control-group">
+  <label class="control-label" for="inputAnsNum">answer number</label>
+  <div class="controls">
+      <label id="num" name="num">{{ data.num }}</label>
+  </div>
+</div>
+</div>
+
+</br>
+
+<!--
+<div class="progress progress-striped active">
+  <div class="bar" style="width: 40%;"></div>
+</div>
+-->
+</br>
+<div class="container">
+<!--<div class="panel panel-default">-->
+  <!-- Default panel contents -->
+  <!--<div class="panel-heading">Answer Phrases</div>-->
+  <!--
+  <div class="panel-body">
+    <p>The answer phrases genearated by the BiDAF model show fellows.</p>
+  </div>
+  -->
+  <!-- Table -->
+  <table class="table table-hover">
+    <thead>
+    <tr>
+      <th>#</th>
+      <th>BiDAF</th>
+      <th>RNet</th>
+      {% if prod %}
+        <th>Prod</th>
+      {% endif %}
+    </tr>
+    </thead>
+    {% if answer %}
+          {% for phrase in answer %}
+          <tr>
+              <td>{{ phrase.cnt }}</td> 
+              <td><span>{{ phrase.bidaf.split(':::')[0]}}</span>
+                  :<span style=" color:#00F">{{ phrase.bidaf.split(':::')[1]}}</span></td>
+              <td><span>{{ phrase.rnet.split(':::')[0]}}</span>
+                  :<span style=" color:#00F">{{ phrase.rnet.split(':::')[1]}}</span></td>
+               {% if prod %}
+               <td><span>{{ phrase.prod.split(':::')[0]}}</span>
+                  :<span style=" color:#00F">{{ phrase.prod.split(':::')[1]}}</span></td>
+               {% endif %}
+          </tr>
+          {% endfor %}
+    {% else %}
+      
+    {% endif %}
+      
+  </table>
+<!--</div>-->
+</div>
+
+{% endblock %}

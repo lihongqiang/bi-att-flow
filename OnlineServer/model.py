@@ -27,6 +27,7 @@ class Submit(Base):
     rnet = Column(String(255))
     num = Column(Integer())
     date = Column(DateTime())
+    prod = Column(String(255))
 
     def __init__(self, context, question, bidaf, rnet, num):
         self.context = context
@@ -35,6 +36,7 @@ class Submit(Base):
         self.rnet = rnet
         self.num = num
         self.date = datetime.datetime.now()
+        self.prod = None
 
     def __repr__(self):
         return "context:`{}`\n question:`{}`\n bidaf:{}\n rnet:{}\n".format(self.context, self.question, self.bidaf, self.rnet)

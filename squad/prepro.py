@@ -33,9 +33,9 @@ def get_args():
     parser.add_argument("--train_name", default='train-v1.1.json')
     parser.add_argument('-d', "--debug", action='store_true')
     parser.add_argument("--train_ratio", default=0.9, type=int)
-    parser.add_argument("--glove_corpus", default="6B")
+    parser.add_argument("--glove_corpus", default="840B")
     parser.add_argument("--glove_dir", default=glove_dir)
-    parser.add_argument("--glove_vec_size", default=100, type=int)
+    parser.add_argument("--glove_vec_size", default=300, type=int)
     parser.add_argument("--mode", default="full", type=str)
     parser.add_argument("--single_path", default="", type=str)
     parser.add_argument("--tokenizer", default="PTB", type=str)
@@ -46,6 +46,9 @@ def get_args():
     
     # q2qw2v_path
     parser.add_argument("--q2qw2v_path", default='/home/t-honli/data/s2vec_emb/q2q.w2v.300d.txt')
+    
+    # q2p word2vec ebm
+    parser.add_argument("--q2pw2v_emb_path", default='/home/t-honli/data/s2vec/text-w2v.model')
     
     # online
     parser.add_argument("--online", default=False, type=bool)
@@ -124,6 +127,7 @@ def get_word2vec(args, word_counter):
     print("{}/{} of word vocab have corresponding vectors in {}".format(len(word2vec_dict), len(word_counter), glove_path))
     return word2vec_dict
 
+# 基于qp model retrain 的emb
 def get_word2vec_q2qw2v(args, word_counter):
     q2qw2v_path = args.q2qw2v_path
     total = len(q2qw2v_path)
@@ -143,6 +147,25 @@ def get_word2vec_q2qw2v(args, word_counter):
                 word2vec_dict[word.upper()] = vector
 
     print("{}/{} of word vocab have corresponding vectors in {}".format(len(word2vec_dict), len(word_counter), q2qw2v_path))
+    return word2vec_dict
+
+# 基于EQnA qp data训练的word2vec
+from gensim.models import Word2Vec
+def get_word2vec_q2pw2v_emb(args, word_counter):
+    model = Word2Vec.load(args.q2pw2v_emb_path)
+    total = len(list(word_counter.keys()))
+    word2vec_dict = {}
+    for word in tqdm(word_counter.keys(), total=total):
+        if word in model.wv.vocab:
+            word2vec_dict[word] = list(map(float, model.wv[word]))
+        elif word.capitalize() in model.wv.vocab:
+            word2vec_dict[word] = list(map(float, model.wv[word.capitalize()]))
+        elif word.lower() in model.wv.vocab:
+            word2vec_dict[word] = list(map(float, model.wv[word.lower()]))
+        elif word.upper() in model.wv.vocab:
+            word2vec_dict[word] = list(map(float, model.wv[word.upper()]))
+
+    print("{}/{} of word vocab have corresponding vectors in {}".format(len(word2vec_dict), len(word_counter), args.q2pw2v_emb_path))
     return word2vec_dict
 
 def getHashCode(context):
@@ -309,10 +332,13 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
     # word2vec_dict = get_word2vec(args, word_counter)
     # lower_word2vec_dict = get_word2vec(args, lower_word_counter)
     
-    # get_word2vec_q2qw2v
-    word2vec_dict = get_word2vec_q2qw2v(args, word_counter)
-    lower_word2vec_dict = get_word2vec_q2qw2v(args, lower_word_counter)
+    # get_word2vec_q2qw2v EQnA model emb
+    # word2vec_dict = get_word2vec_q2qw2v(args, word_counter)
+    # lower_word2vec_dict = get_word2vec_q2qw2v(args, lower_word_counter)
     
+    # get_word2vec_q2pw2v_emb EQnA data emb
+    #word2vec_dict = get_word2vec_q2pw2v_emb(args, word_counter)
+    #lower_word2vec_dict = get_word2vec_q2pw2v_emb(args, lower_word_counter)
 
     # add context here
     data = {'q': q, 'cq': cq, 'y': y, '*x': rx, '*cx': rcx, 'cy': cy,
@@ -480,8 +506,16 @@ def prepro_online(args, start_ratio=0.0, stop_ratio=1.0, in_path=None):
         if args.debug:
             break
 
-    word2vec_dict = get_word2vec(args, word_counter)
-    lower_word2vec_dict = get_word2vec(args, lower_word_counter)
+    #word2vec_dict = get_word2vec(args, word_counter)
+    #lower_word2vec_dict = get_word2vec(args, lower_word_counter)
+    
+    # get_word2vec_q2pw2v_emb EQnA data emb
+    #word2vec_dict = get_word2vec_q2pw2v_emb(args, word_counter)
+    #lower_word2vec_dict = get_word2vec_q2pw2v_emb(args, lower_word_counter)
+    
+    # get_word2vec_q2qw2v EQnA model emb
+    word2vec_dict = get_word2vec_q2qw2v(args, word_counter)
+    lower_word2vec_dict = get_word2vec_q2qw2v(args, lower_word_counter)
 
     # add context here
     data = {'q': q, 'cq': cq, 'y': y, '*x': rx, '*cx': rcx, 'cy': cy,

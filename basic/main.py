@@ -37,6 +37,8 @@ def set_dirs(config):
         shutil.rmtree(config.out_dir)
 
     config.save_dir = os.path.join(config.out_dir, "save")
+    print ('create save_dir', config.save_dir)
+    
     config.log_dir = os.path.join(config.out_dir, "log")
     config.eval_dir = os.path.join(config.out_dir, "eval")
     config.answer_dir = os.path.join(config.out_dir, "answer")
@@ -158,6 +160,76 @@ def _train(config):
         graph_handler.save(sess, global_step=global_step)
 
 
+def _test_emb(config):
+    
+    data_filter = get_squad_data_filter(config)
+    print ('train config.load ', config.load)
+    train_data = read_data(config, 'train', config.load, data_filter=data_filter)
+    print ('dev config.load ', config.load)
+    dev_data = read_data(config, 'dev', True, data_filter=data_filter)
+    update_config(config, [train_data, dev_data])
+
+    _config_debug(config)
+
+    word2vec_dict = train_data.shared['lower_word2vec'] if config.lower_word else train_data.shared['word2vec']
+    word2idx_dict = train_data.shared['word2idx']
+    idx2vec_dict = {word2idx_dict[word]: vec for word, vec in word2vec_dict.items() if word in word2idx_dict}
+    
+    # word embedding
+    emb_mat = np.array([idx2vec_dict[idx] if idx in idx2vec_dict
+                        else np.random.multivariate_normal(np.zeros(config.word_emb_size), np.eye(config.word_emb_size))
+                        for idx in range(config.word_vocab_size)])
+    config.emb_mat = emb_mat
+    
+    if config.online:
+        test_data = read_data(config, 'online', True)
+    else:
+        test_data = read_data(config, 'test', True)
+    update_config(config, [test_data])
+
+    _config_debug(config)
+    
+    if config.use_glove_for_unk:
+        word2vec_dict = test_data.shared['lower_word2vec'] if config.lower_word else test_data.shared['word2vec']
+        new_word2idx_dict = test_data.shared['new_word2idx']
+        idx2vec_dict = {idx: word2vec_dict[word] for word, idx in new_word2idx_dict.items()}
+        new_emb_mat = np.array([idx2vec_dict[idx] for idx in range(len(idx2vec_dict))], dtype='float32')
+        config.new_emb_mat = new_emb_mat
+
+    # pprint(config.__flags, indent=2)
+    models = get_multi_gpu_models(config)
+    model = models[0]
+    evaluator = MultiGPUF1Evaluator(config, models, tensor_dict=models[0].tensor_dict if config.vis else None)
+    graph_handler = GraphHandler(config, model)
+
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, gpu_options = tf.GPUOptions(allow_growth = True)))
+    graph_handler.initialize(sess)
+    num_steps = math.ceil(1.0 * test_data.num_examples / (config.batch_size * config.num_gpus)) # 2021 / 10 = 203
+    
+    # 这个地方可以自己设置test的num batch，就是不测试所有的batch，一般小于总大小
+    if 0 < config.test_num_batches < num_steps:
+        num_steps = config.test_num_batches
+
+    
+    e = None
+    for multi_batch in tqdm(test_data.get_multi_batches(config.batch_size, config.num_gpus, num_steps=num_steps, cluster=config.cluster), total=num_steps):
+        ei = evaluator.get_evaluation(sess, multi_batch)
+        e = ei if e is None else e + ei
+        if config.vis:
+            eval_subdir = os.path.join(config.eval_dir, "{}-{}".format(ei.data_type, str(ei.global_step).zfill(6)))
+            if not os.path.exists(eval_subdir):
+                os.mkdir(eval_subdir)
+            path = os.path.join(eval_subdir, str(ei.idxs[0]).zfill(8))
+            graph_handler.dump_eval(ei, path=path)
+
+    print(e)
+    if config.dump_answer:
+        print("dumping answer ...")
+        graph_handler.dump_answer(e)
+    if config.dump_eval:
+        print("dumping eval ...")
+        graph_handler.dump_eval(e)
+
 def _test(config):
     if config.online:
         test_data = read_data(config, 'online', True)
@@ -207,7 +279,6 @@ def _test(config):
     if config.dump_eval:
         print("dumping eval ...")
         graph_handler.dump_eval(e)
-
 
 def _forward(config):
     assert config.load

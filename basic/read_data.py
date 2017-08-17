@@ -313,6 +313,7 @@ def update_config(config, data_sets):
 
     config.char_vocab_size = len(data_sets[0].shared['char2idx'])
     config.word_emb_size = len(next(iter(data_sets[0].shared['word2vec'].values())))
+    print ('config word emb size: ', config.word_emb_size)
     config.word_vocab_size = len(data_sets[0].shared['word2idx'])
 
     if config.single:

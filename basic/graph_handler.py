@@ -17,7 +17,7 @@ class GraphHandler(object):
         self.model = model
         self.saver = tf.train.Saver(max_to_keep=config.max_to_keep)
         self.writer = None
-        self.save_path = config.save_dir # + save
+        self.save_path = os.path.join(config.save_dir, 'save') # save/save
         #self.save_path = os.path.join(config.save_dir, config.model_name)
 
     def initialize(self, sess):
@@ -30,6 +30,7 @@ class GraphHandler(object):
 
     def save(self, sess, global_step=None):
         saver = tf.train.Saver(max_to_keep=self.config.max_to_keep)
+        print ('write :', self.save_path)
         saver.save(sess, self.save_path, global_step=global_step)
 
     def _load(self, sess):
@@ -47,6 +48,7 @@ class GraphHandler(object):
         elif config.load_step > 0:
             save_path = os.path.join(config.save_dir, "{}-{}".format(config.model_name, config.load_step))
         else:
+            print ('config save_dir', config.save_dir)
             save_dir = config.save_dir
             checkpoint = tf.train.get_checkpoint_state(save_dir)
             assert checkpoint is not None, "cannot load checkpoint at {}".format(save_dir)

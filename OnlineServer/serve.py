@@ -5,6 +5,7 @@ import json
 import os
 import time
 import requests
+import threading
 import sys
 sys.path.append('/home/t-honli/bi-att-flow')
 
@@ -113,7 +114,7 @@ class ServeClass():
         data_dir = os.path.join('/home/t-honli/bi-att-flow/data/online', file_name.split('.')[0])
         answer_dir = data_dir
         ans_num = num
-        out_dir = 'out/EQnA/03-07-2017'
+        out_dir = 'out/EQnA/no_sent_token/01-08-2017'
         os.system("python -m basic.cli --len_opt --cluster --dump_eval=False --data_dir={} --online=True --topk={} --out_dir={} --answer_dir={}".format(data_dir, ans_num, out_dir, answer_dir))
     
     def testDataOline(self, num, file_path):
@@ -127,7 +128,7 @@ class ServeClass():
     # show answer
     def showAnswer(self, file_name):
 
-        answer_dir = '/home/t-honli/bi-att-flow/out/EQnA/03-07-2017/answer'
+        answer_dir = '/home/t-honli/bi-att-flow/out/EQnA/no_sent_token/01-08-2017/answer'
         name = 'online-020000.json'
         answer = json.load(open(os.path.join(answer_dir, name), "r"))
         answer_list = []
@@ -202,8 +203,23 @@ class ServeClass():
         # print (self.AnswerByBiDAF)
         # print (self.AnswerByRNet)
         print ('getAllAnswer start', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
-        thread1 = gevent.spawn(self.getAnswerByRNet, context, question, num)
-        thread2 = gevent.spawn(self.getAnswerPhrase, context, question, num, answer)
-        gevent.joinall([thread1, thread2])
+        thread_list = []    #线程存放列表
+        
+        t1 = threading.Thread(target=self.getAnswerByRNet,args=(context, question, num))
+        t1.setDaemon(True)
+        thread_list.append(t1)
+        
+        t2 = threading.Thread(target=self.getAnswerPhrase,args=(context, question, num, answer))
+        t2.setDaemon(True)
+        thread_list.append(t2)
+        
+        for t in thread_list:
+            t.start()
+        for t in thread_list:
+            t.join()
+            
+        #thread1 = gevent.spawn(self.getAnswerByRNet, context, question, num)
+        #thread2 = gevent.spawn(self.getAnswerPhrase, context, question, num, answer)
+        #gevent.joinall([thread1, thread2])
         print ('getAllAnswer end', time.strftime( ISOTIMEFORMAT, time.localtime( time.time() )))
         return self.AnswerByBiDAF, self.AnswerByRNet

@@ -131,7 +131,14 @@ def get_logits(args, size, bias, bias_start=0.0, scope=None, mask=None, wd=0.0, 
     else:
         raise Exception()
 
-
+def gate_layer(arg, bias, bias_start=0.0, scope=None, wd=0.0, input_keep_prob=1.0, is_train=None):
+    with tf.variable_scope(scope or "gate_layer"):
+        d = arg.get_shape()[-1]
+        gate = linear([arg], d, bias, bias_start=bias_start, scope='gate', wd=wd, input_keep_prob=input_keep_prob, is_train=is_train)
+        gate = tf.nn.sigmoid(gate)
+        out = gate * arg
+        return out
+    
 def highway_layer(arg, bias, bias_start=0.0, scope=None, wd=0.0, input_keep_prob=1.0, is_train=None):
     with tf.variable_scope(scope or "highway_layer"):
         d = arg.get_shape()[-1]
@@ -141,7 +148,6 @@ def highway_layer(arg, bias, bias_start=0.0, scope=None, wd=0.0, input_keep_prob
         gate = tf.nn.sigmoid(gate)
         out = gate * trans + (1 - gate) * arg
         return out
-
 
 def highway_network(arg, num_layers, bias, bias_start=0.0, scope=None, wd=0.0, input_keep_prob=1.0, is_train=None):
     with tf.variable_scope(scope or "highway_network"):

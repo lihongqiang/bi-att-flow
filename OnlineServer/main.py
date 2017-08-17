@@ -53,6 +53,9 @@ def demo():
         
         AnswerByBiDAF, AnswerByRNet = servecls.getAllAnswer(context, question, num, answer)
         
+        print ("bidaf: ", AnswerByBiDAF)
+        print ("rnet: ",  AnswerByRNet)
+        
         # add to sql
         cnt, bidaf_answers, bidaf_probability = zip(*AnswerByBiDAF)
         
@@ -85,16 +88,27 @@ def example(id=209):
     data = {"context":submit.context, "question":submit.question, "num":submit.num}
     AnswerByBiDAF = submit.bidaf.split('|||')
     AnswerByRNet = submit.rnet.split('|||')
+    AnswerByProd = None
+    if submit.prod:
+        AnswerByProd = submit.prod.split('|||')
     answer = list()
     cnt = 1
-    for bidaf, rnet in zip(AnswerByBiDAF, AnswerByRNet):
-        bidaf = bidaf.split(':::')
-        rnet = rnet.split(':::')
-        answer.append({"cnt": cnt, "bidaf":bidaf[0]+":::"+bidaf[1], "rnet":rnet[0]+":::"+rnet[1]})
-        cnt += 1
+    if AnswerByProd:
+        for bidaf, rnet, prod in zip(AnswerByBiDAF, AnswerByRNet, AnswerByProd):
+            bidaf = bidaf.split(':::')
+            rnet = rnet.split(':::')
+            prod = prod.split(':::')
+            answer.append({"cnt": cnt, "bidaf":bidaf[0]+":::"+bidaf[1], "rnet":rnet[0]+":::"+rnet[1], "prod":prod[0]+":::"+prod[1]})
+            cnt += 1
+    else:
+        for bidaf, rnet in zip(AnswerByBiDAF, AnswerByRNet):
+            bidaf = bidaf.split(':::')
+            rnet = rnet.split(':::')
+            answer.append({"cnt": cnt, "bidaf":bidaf[0]+":::"+bidaf[1], "rnet":rnet[0]+":::"+rnet[1]})
+            cnt += 1
     # 关闭session:
     session.close()
-    return render_template('example.html', answer=answer, data=data)
+    return render_template('example.html', answer=answer, data=data, prod=(AnswerByProd is not None))
 
 @app.route("/history", methods=['GET'])
 def history(name=None):

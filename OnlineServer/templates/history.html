@@ -14,18 +14,24 @@
 <script type="text/javascript">
     $(document).ready(function() {
         $('#table').dataTable().fnDestroy();
-        $('#table').DataTable({
+        table = $('#table').DataTable({
             "ajax": "http://10.190.190.137:5000/history_data",
             "columns": [
                 { "data": 'datetime'},
                 { "data": 'context'},
                 { "data": 'question'},
                 { "data": 'num'},
-                { "data": 'answers'},
-                { "data": 'probability'},
+                { "data": 'bidaf'},
+                { "data": 'rnet'},
             ],
             "order": [[ 0, "desc" ]]
         }); 
+        table.on('click', 'tr', function() {
+            var obj = table.row(this).data();
+            var strJSON = JSON.stringify(obj);
+            var data = eval( "(" + strJSON + ")" );
+            self.location="http://10.190.190.137:5000/example/"+data.id; 
+        });
       });
     
 </script>
@@ -35,7 +41,8 @@
 
 <div class="container">
     <div class="page-header">
-        <h1>Hello, {{ name }}!</h1>
+        <h1>Hello, Everyone.</h1>
+        <p>You can <b>click the row</b> that you want to see the detail in the example view.</p>
     </div>
 
     <div>
@@ -45,9 +52,9 @@
                 <th>DateTime</th>
                 <th>Context</th>
                 <th>Question</th>
-                <th>Num</th>
-                <th>Answers</th>
-                <th>Probability</th>
+                      <th>Num</th>
+                <th>BiDAF</th>
+                <th>RNet</th>
             </tr>
         </thead>
     </table>

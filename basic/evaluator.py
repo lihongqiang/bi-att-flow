@@ -5,7 +5,7 @@ from basic.read_data import DataSet
 from my.nltk_utils import span_f1
 from my.tensorflow import padded_reshape
 from my.utils import argmax
-from squad.utils import get_phrase, get_best_span, get_best_span_wy, get_best_span_topk_nocover_fraction
+from squad.utils import get_phrase, get_best_span, get_best_span_wy, get_best_span_topk_nocover_fraction, get_best_span_topk_nocover
 
 
 class Evaluation(object):
@@ -289,7 +289,7 @@ class F1Evaluator(LabeledEvaluator):
             if self.config.topk == 0:
                 spans, scores = zip(*[get_best_span(ypi, yp2i) for ypi, yp2i in zip(yp, yp2)])
             else:
-                spans, scores = zip(*[get_best_span_topk_nocover_fraction(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
+                spans, scores = zip(*[get_best_span_topk_nocover(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
 
         def _get(xi, span):
             if len(xi) <= span[0][0]:
@@ -342,7 +342,7 @@ class F1Evaluator(LabeledEvaluator):
         
         tensor_dict = dict(zip(self.tensor_dict.keys(), vals))
         e = F1Evaluation(data_set.data_type, int(global_step), idxs, yp.tolist(), yp2.tolist(), y,
-                         correct, float(loss), f1s, id2answer_dict, tensor_dict=tensor_dict)
+                         correct, float(loss), f1s, id2answer_dict, tensor_dict=tensor_dict) # 这里计算出所有的指标如f1, loss, acc，并调用add summary
         if self.config.wy:
             e.dict['wyp'] = wyp.tolist()
         return e
