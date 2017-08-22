@@ -272,7 +272,7 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
                     answer_start = answer['answer_start']
                     answer_stop = answer_start + len(answer_text)
                     # TODO : put some function that gives word_start, word_stop here
-                    yi0, yi1 = get_word_span(context, xi, answer_start, answer_stop)    #第一个词和最后一个词的句子和词索引
+                    yi0, yi1 = get_word_span(context, xi, answer_start, answer_stop, answer_text)    #第一个词和最后一个词的句子和词索引
                     # yi0 = answer['answer_word_start'] or [0, 0]
                     # yi1 = answer['answer_word_stop'] or [0, 1]
                     assert len(xi[yi0[0]]) > yi0[1]
@@ -293,8 +293,9 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
                     # print ('w1:', w1)
                     assert answer_text[0] == w0[cyi0], (answer_text, w0, cyi0)  # 答案的第一个字母和第一个词的第一个字幕是否相同
                     assert answer_text[-1] == w1[cyi1]  # 答案的最后一个字母和最后一个词的最后一个字母是否相同
-                    assert cyi0 < 32, (answer_text, w0)
-                    assert cyi1 < 32, (answer_text, w1)
+                    # assert cyi0 < 32, (answer_text, w0)
+                    # assert cyi1 < 32, (answer_text, w1)
+                    
 
                     yi.append([yi0, yi1])
                     cyi.append([cyi0, cyi1])
@@ -333,8 +334,8 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
     # lower_word2vec_dict = get_word2vec(args, lower_word_counter)
     
     # get_word2vec_q2qw2v EQnA model emb
-    # word2vec_dict = get_word2vec_q2qw2v(args, word_counter)
-    # lower_word2vec_dict = get_word2vec_q2qw2v(args, lower_word_counter)
+    word2vec_dict = get_word2vec_q2qw2v(args, word_counter)
+    lower_word2vec_dict = get_word2vec_q2qw2v(args, lower_word_counter)
     
     # get_word2vec_q2pw2v_emb EQnA data emb
     #word2vec_dict = get_word2vec_q2pw2v_emb(args, word_counter)

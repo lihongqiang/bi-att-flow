@@ -19,7 +19,7 @@ def get_2d_spans(text, tokenss):
     return spanss
 
 # 获取包含start和stop这个词的词在文中的索引 (sent_id, word_id) (sent_id, word_id + 1)
-def get_word_span(context, wordss, start, stop):
+def get_word_span(context, wordss, start, stop, answer_text):
     spanss = get_2d_spans(context, wordss)
     idxs = []
     for sent_idx, spans in enumerate(spanss):
@@ -27,7 +27,7 @@ def get_word_span(context, wordss, start, stop):
             if not (stop <= span[0] or start >= span[1]):
                 idxs.append((sent_idx, word_idx))
 
-    assert len(idxs) > 0, "{} {} {} {}".format(context, spanss, start, stop)
+    assert len(idxs) > 0, "{} {} {} {} {}".format(context, spanss, start, stop, answer_text)
     return idxs[0], (idxs[-1][0], idxs[-1][1] + 1)
 
 

@@ -25,6 +25,7 @@ class ServeClass():
         self.AnswerByRNet = list()
 
     def generateJson(self, context, query, answer=""):
+        
         online_data = pd.DataFrame({"Query":query, "Context":context, "phrase":answer}, columns=["Query", "Context", "phrase"], index=[0])
         # 只处理lable为1的row
         target_dev_data = {}

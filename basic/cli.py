@@ -6,7 +6,7 @@ from basic.main import main as m
 
 import os
 import time
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 flags = tf.app.flags
 
@@ -58,7 +58,7 @@ flags.DEFINE_boolean("sentece_token", False, "sentece")
 flags.DEFINE_integer("batch_size", 60, "Batch size [60]")
 flags.DEFINE_integer("val_num_batches", 100, "validation num batches [100]")
 flags.DEFINE_integer("test_num_batches", 0, "test num batches [0]")
-flags.DEFINE_integer("num_epochs", 12, "Total number of epochs for training [12]")
+flags.DEFINE_integer("num_epochs", 10, "Total number of epochs for training [12]")
 flags.DEFINE_integer("num_steps", 30000, "Number of steps [20000]")
 
 flags.DEFINE_float("init_lr", 0.001, "Initial learning rate [0.001]")
