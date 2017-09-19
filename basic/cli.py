@@ -6,7 +6,7 @@ from basic.main import main as m
 
 import os
 import time
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 flags = tf.app.flags
 
@@ -23,11 +23,11 @@ flags.DEFINE_string("out_base_dir", "out", "out base dir [out]")
 flags.DEFINE_string("out_dir", "", "out dir [out/date]")
 flags.DEFINE_string("answer_path", "", "Answer path []")# 设置答案的路径
 flags.DEFINE_string("eval_path", "", "Eval path []")    # 设置评价脚本的路径
-flags.DEFINE_string("shared_path", "", "Shared path []")# 生成的共享文件路径
+flags.DEFINE_string("shared_path", "", "Shared path []")# 生成的共享文件路径   加载
 
 # test
-flags.DEFINE_string("load_path", "", "Load path []")    # 设置加载的模型路径
-flags.DEFINE_integer("load_step", 0, "load step [0]")   # step
+flags.DEFINE_string("load_path", "", "Load path []")    # 设置加载的模型路径  加载
+flags.DEFINE_integer("load_step", 0, "load step [0]")   # step            加载
 
 # Device placement
 flags.DEFINE_string("device", "/cpu:0", "default device for summing gradients. [/cpu:0]")
@@ -57,9 +57,9 @@ flags.DEFINE_boolean("sentece_token", False, "sentece")
 # Training / test parameters
 flags.DEFINE_integer("batch_size", 60, "Batch size [60]")
 flags.DEFINE_integer("val_num_batches", 100, "validation num batches [100]")
-flags.DEFINE_integer("test_num_batches", 0, "test num batches [0]")
-flags.DEFINE_integer("num_epochs", 10, "Total number of epochs for training [12]")
-flags.DEFINE_integer("num_steps", 30000, "Number of steps [20000]")
+flags.DEFINE_integer("test_num_batches", 100, "test num batches [0]")
+flags.DEFINE_integer("num_epochs", 20, "Total number of epochs for training [12]")
+flags.DEFINE_integer("num_steps", 0, "Number of steps [20000]")
 
 flags.DEFINE_float("init_lr", 0.001, "Initial learning rate [0.001]")
 flags.DEFINE_float("input_keep_prob", 0.8, "Input keep prob for the dropout of LSTM weights [0.8]")
@@ -88,8 +88,8 @@ flags.DEFINE_integer("log_period", 100, "Log period [100]")
 flags.DEFINE_integer("eval_period", 1000, "Eval period [1000]")
 flags.DEFINE_integer("save_period", 1000, "Save Period [1000]")
 flags.DEFINE_integer("max_to_keep", 20, "Max recent saves to keep [20]")
-flags.DEFINE_bool("dump_eval", True, "dump eval? [True]")
-flags.DEFINE_bool("dump_answer", True, "dump answer? [True]")
+flags.DEFINE_bool("dump_eval", False, "dump eval? [True]")
+flags.DEFINE_bool("dump_answer", False, "dump answer? [True]")
 flags.DEFINE_bool("vis", False, "output visualization numbers? [False]")
 flags.DEFINE_bool("dump_pickle", True, "Dump pickle instead of json? [True]")
 flags.DEFINE_float("decay", 0.9, "Exponential moving average decay for logging values [0.9]")
@@ -129,8 +129,9 @@ flags.DEFINE_bool("highway", True, "Use highway? [True]")
 flags.DEFINE_bool("use_sentence_emb", False, "use sentence emb? [True]")
 flags.DEFINE_integer("sent_dim", 600, "sentence emb dim")
 
-# add pretrained word2vec
+flags.DEFINE_bool("fraction", False, "Softmax the left answer score when getting multi answer [False]")
 
+flags.DEFINE_bool("retrain", False, "retrain")
 
 def main(_):
     config = flags.FLAGS

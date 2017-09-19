@@ -179,15 +179,24 @@ def read_data(config, data_type, ref, data_filter=None):
 
     print("Loaded {}/{} examples from {}".format(len(valid_idxs), num_examples, data_type))
 
+    
+    # 加载模型的shared 主要是word_id
     shared_path = config.shared_path or os.path.join(config.out_dir, "shared.json")
+    
+    # 在训练的时候生成每个单词和字符的 word:id ch:id dict
     if not ref:
         word2vec_dict = shared['lower_word2vec'] if config.lower_word else shared['word2vec']
         word_counter = shared['lower_word_counter'] if config.lower_word else shared['word_counter']
         char_counter = shared['char_counter']
+        
+        # 是否更新在glove字典中能够找到的词
+        # 1. 模型存储在glove（词典）中的词，更新这些词的word embedding，词频大于等于10
+        print ('config finetune', config.finetune)
         if config.finetune:
             shared['word2idx'] = {word: idx + 2 for idx, word in
                                   enumerate(word for word, count in word_counter.items()
                                             if count > config.word_count_th or (config.known_if_glove and word in word2vec_dict))}
+        # 2. 模型存储不在glove中的词，更新这些词的word embedding，默认False
         else:
             assert config.known_if_glove
             assert config.use_glove_for_unk
@@ -206,7 +215,7 @@ def read_data(config, data_type, ref, data_filter=None):
         
         # 不懂在什么时候写了shared.json 这个文件
         # print ('write json: ' + shared_path) 
-        
+        print ('get word2idx')
         json.dump({'word2idx': shared['word2idx'], 'char2idx': shared['char2idx']}, open(shared_path, 'w'))
     else:
         new_shared = json.load(open(shared_path, 'r'))
@@ -214,17 +223,26 @@ def read_data(config, data_type, ref, data_filter=None):
             shared[key] = val
 
     if config.use_glove_for_unk:
-        # create new word2idx and word2vec
+        
+        # 找到不在加载的模型中的word，构建新的单词和id， id对应在新词的序号
         word2vec_dict = shared['lower_word2vec'] if config.lower_word else shared['word2vec']
         new_word2idx_dict = {word: idx for idx, word in enumerate(word for word in word2vec_dict.keys() if word not in shared['word2idx'])}
         shared['new_word2idx'] = new_word2idx_dict
-        offset = len(shared['word2idx'])
-        word2vec_dict = shared['lower_word2vec'] if config.lower_word else shared['word2vec']
+        
+        
+        # offset = len(shared['word2idx'])
+        # word2vec_dict = shared['lower_word2vec'] if config.lower_word else shared['word2vec']
+        
+        # 获取这些新的词的id2vec，vec在glove中的向量，id对应在新词的序号
         new_word2idx_dict = shared['new_word2idx']
         idx2vec_dict = {idx: word2vec_dict[word] for word, idx in new_word2idx_dict.items()}
+        
         # print("{}/{} unique words have corresponding glove vectors.".format(len(idx2vec_dict), len(word2idx_dict)))
-        new_emb_mat = np.array([idx2vec_dict[idx] for idx in range(len(idx2vec_dict))], dtype='float32')
+        
+        # 新的需要添加到model中的词向量矩阵，id是新的词典大小重新编号
+        new_emb_mat = np.array([idx2vec_dict[idx] for idx in range(len(idx2vec_dict))] + [[0 for i in range(300)]], dtype='float32')
         shared['new_emb_mat'] = new_emb_mat
+        print ('shared new_emb_mat ', new_emb_mat.shape)
 
     data_set = DataSet(data, data_type, shared=shared, valid_idxs=valid_idxs)
     return data_set

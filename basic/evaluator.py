@@ -231,6 +231,7 @@ class F1Evaluation(AccuracyEvaluation):
             new_id2na_dict = dict(list(self.id2answer_dict['na'].items()) + list(other.id2answer_dict['na'].items()))
             new_id2answer_dict['na'] = new_id2na_dict
         e = F1Evaluation(self.data_type, self.global_step, new_idxs, new_yp, new_yp2, new_y, new_correct, new_loss, new_f1s, new_id2answer_dict)
+        #print (type(e))
         if 'wyp' in self.dict:
             new_wyp = self.dict['wyp'] + other.dict['wyp']
             e.dict['wyp'] = new_wyp
@@ -289,7 +290,10 @@ class F1Evaluator(LabeledEvaluator):
             if self.config.topk == 0:
                 spans, scores = zip(*[get_best_span(ypi, yp2i) for ypi, yp2i in zip(yp, yp2)])
             else:
-                spans, scores = zip(*[get_best_span_topk_nocover(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
+                if self.config.fraction:
+                    spans, scores = zip(*[get_best_span_topk_nocover_fraction(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
+                else:
+                    spans, scores = zip(*[get_best_span_topk_nocover(ypi, yp2i, self.config.topk) for ypi, yp2i in zip(yp, yp2)])
 
         def _get(xi, span):
             if len(xi) <= span[0][0]:

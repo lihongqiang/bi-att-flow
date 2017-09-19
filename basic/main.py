@@ -37,7 +37,7 @@ def set_dirs(config):
         shutil.rmtree(config.out_dir)
 
     config.save_dir = os.path.join(config.out_dir, "save")
-    print ('create save_dir', config.save_dir)
+    print ('print save_dir', config.save_dir)
     
     config.log_dir = os.path.join(config.out_dir, "log")
     config.eval_dir = os.path.join(config.out_dir, "eval")
@@ -66,23 +66,37 @@ def _config_debug(config):
 
 def _train(config):
     data_filter = get_squad_data_filter(config)
+    
+    # 训练的时候，构建词的编号，存储再shared.json里面，load时加载shared文件
     print ('train config.load ', config.load)
     train_data = read_data(config, 'train', config.load, data_filter=data_filter)
-    print ('dev config.load ', config.load)
+    
+    # 对dev的数据，不构建词的编号
+    print ('dev config.load True')
     dev_data = read_data(config, 'dev', True, data_filter=data_filter)
-    update_config(config, [train_data, dev_data])
+    update_config(config, [train_data])
 
     _config_debug(config)
 
-    word2vec_dict = train_data.shared['lower_word2vec'] if config.lower_word else train_data.shared['word2vec']
-    word2idx_dict = train_data.shared['word2idx']
-    idx2vec_dict = {word2idx_dict[word]: vec for word, vec in word2vec_dict.items() if word in word2idx_dict}
-    
-    # word embedding
-    emb_mat = np.array([idx2vec_dict[idx] if idx in idx2vec_dict
-                        else np.random.multivariate_normal(np.zeros(config.word_emb_size), np.eye(config.word_emb_size))
-                        for idx in range(config.word_vocab_size)])
-    config.emb_mat = emb_mat
+    print ('config retrain:', config.retrain)
+    # 如果不加载已有模型的
+    if not config.retrain:
+        # 训练数据中的word:vec dict, 通过查找golve获得
+        word2vec_dict = train_data.shared['lower_word2vec'] if config.lower_word else train_data.shared['word2vec']
+
+        # read data过程中对train data的单词编号
+        word2idx_dict = train_data.shared['word2idx']
+
+        # 训练数据中所有词的 id:vec dict
+        idx2vec_dict = {word2idx_dict[word]: vec for word, vec in word2vec_dict.items() if word in word2idx_dict}
+
+        # 构建word embedding矩阵，遍历train和dev在update_config中更新单词总个数,如果单词在训练数据集中的id2vec字典中，设置设个id的vec，否则随机给一个
+        emb_mat = np.array([idx2vec_dict[idx] if idx in idx2vec_dict
+                            else np.random.multivariate_normal(np.zeros(config.word_emb_size), np.eye(config.word_emb_size))
+                            for idx in range(config.word_vocab_size)])
+        config.emb_mat = emb_mat
+
+        print ('emb_mat: ', len(emb_mat))
     
     if config.use_sentence_emb:
         # set model config
@@ -123,8 +137,8 @@ def _train(config):
     graph_handler.initialize(sess)
 
     # Begin training  20000   q_size/(60 * 1) * 12
-    # num_steps = config.num_steps or int(math.ceil(train_data.num_examples / (config.batch_size * config.num_gpus))) * config.num_epochs
-    num_steps = int(math.ceil(train_data.num_examples / (config.batch_size * config.num_gpus))) * config.num_epochs
+    num_steps = config.num_steps or int(math.ceil(train_data.num_examples / (config.batch_size * config.num_gpus))) * config.num_epochs
+    #num_steps = int(math.ceil(train_data.num_examples / (config.batch_size * config.num_gpus))) * config.num_epochs
     global_step = 0
     for batches in tqdm(train_data.get_multi_batches(config.batch_size, config.num_gpus,
                                                      num_steps=num_steps, shuffle=True, cluster=config.cluster), total=num_steps):
@@ -148,6 +162,7 @@ def _train(config):
             e_train = evaluator.get_evaluation_from_batches(
                 sess, tqdm(train_data.get_multi_batches(config.batch_size, config.num_gpus, num_steps=num_steps), total=num_steps)
             )
+
             graph_handler.add_summaries(e_train.summaries, global_step)
             e_dev = evaluator.get_evaluation_from_batches(
                 sess, tqdm(dev_data.get_multi_batches(config.batch_size, config.num_gpus, num_steps=num_steps), total=num_steps))
@@ -162,6 +177,7 @@ def _train(config):
 
 
 def _test_emb(config):
+    
     
     data_filter = get_squad_data_filter(config)
     print ('train config.load ', config.load)
@@ -240,12 +256,24 @@ def _test(config):
 
     _config_debug(config)
 
+    # 测试的是否，选择是否使用glove来更新不在训练的model里面的词的词向量
     if config.use_glove_for_unk:
+        
+        # 测试数据的词向量，通过glove获取
         word2vec_dict = test_data.shared['lower_word2vec'] if config.lower_word else test_data.shared['word2vec']
+        
+        # 加载的model中的word2id 字典，每一个id对应了model存储的embedding matrix矩阵中的一个词向量，id对应在新词的序号
         new_word2idx_dict = test_data.shared['new_word2idx']
+        
+        # id vec， 这里的id对应在新词的序号
         idx2vec_dict = {idx: word2vec_dict[word] for word, idx in new_word2idx_dict.items()}
+        
+        # 这里的idx是新数据中不在model的word表中的词的序号，应该不是id2vec的索引号
         new_emb_mat = np.array([idx2vec_dict[idx] for idx in range(len(idx2vec_dict))], dtype='float32')
         config.new_emb_mat = new_emb_mat
+        
+        print ('the number of words not in model :', len(new_emb_mat))
+
 
     # pprint(config.__flags, indent=2)
     models = get_multi_gpu_models(config)
@@ -260,7 +288,8 @@ def _test(config):
     # 这个地方可以自己设置test的num batch，就是不测试所有的batch，一般小于总大小
     if 0 < config.test_num_batches < num_steps:
         num_steps = config.test_num_batches
-
+    
+    print (num_steps, config.test_num_batches)
     
     e = None
     for multi_batch in tqdm(test_data.get_multi_batches(config.batch_size, config.num_gpus, num_steps=num_steps, cluster=config.cluster), total=num_steps):

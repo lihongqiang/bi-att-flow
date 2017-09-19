@@ -77,9 +77,7 @@ class Model(object):
 
     def _build_forward(self):
         
-        ####################
-        ## embedding module
-        ####################
+        
         config = self.config
         N, M, JX, JQ, VW, VC, d, W = \
             config.batch_size, config.max_num_sents, config.max_sent_size, \
@@ -90,6 +88,9 @@ class Model(object):
         M = tf.shape(self.x)[1]
         dc, dw, dco = config.char_emb_size, config.word_emb_size, config.char_out_size
 
+        ##############################################
+        ## word and character embedding layer
+        ##############################################
         with tf.variable_scope("emb"):
             if config.use_char_emb:
                 with tf.variable_scope("emb_var"), tf.device("/cpu:0"):
@@ -114,14 +115,22 @@ class Model(object):
                         xx = tf.reshape(xx, [-1, M, JX, dco])
                         qq = tf.reshape(qq, [-1, JQ, dco])
             
-            # 替换1
             if config.use_word_emb:
                 with tf.variable_scope("emb_var"), tf.device("/cpu:0"):
                     if config.mode == 'train':
-                        # 默认可以重新训练，这里默认设置重新训练
-                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat))
+                        
+                        # retrain
+                        if config.retrain:
+                            
+                            word_emb_mat = tf.get_variable("word_emb_mat", shape=[VW, dw], dtype='float')
+                        else:
+                            # 默认采用的是glove的weord ebmdedding, 这里替换成了qp model retrained的embedding
+                            word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat))
+                        
                     else:
                         word_emb_mat = tf.get_variable("word_emb_mat", shape=[VW, dw], dtype='float')
+                        
+                    print ('word size = ', VW)
                     if config.use_glove_for_unk:
                         word_emb_mat = tf.concat(axis=0, values=[word_emb_mat, self.new_emb_mat])
 
@@ -136,8 +145,10 @@ class Model(object):
                 else:
                     xx = Ax
                     qq = Aq
-
+        
+        ##################################################
         # highway network
+        ##################################################
         if config.highway:
             with tf.variable_scope("highway"):
                 xx = highway_network(xx, config.highway_num_layers, True, wd=config.wd, is_train=self.is_train)
@@ -186,6 +197,9 @@ class Model(object):
             self.tensor_dict['u'] = u
             self.tensor_dict['h'] = h
         else:
+            #################################
+            ## Contextual embeded layer
+            ################################
             with tf.variable_scope("prepro"):
                 (fw_u, bw_u), ((_, fw_u_f), (_, bw_u_f)) = bidirectional_dynamic_rnn(d_cell_fw, d_cell_bw, qq, q_len, dtype='float', scope='u1')  # [N, J, d], [N, d]
                 u = tf.concat(axis=2, values=[fw_u, bw_u])# [N, JX, 2d]
@@ -199,11 +213,10 @@ class Model(object):
                 self.tensor_dict['u'] = u
                 self.tensor_dict['h'] = h
             
-        ################
-        ## answer module
-        ################
+        
         with tf.variable_scope("main"):
-            if config.dynamic_att: # Dynamic attention
+             # Dynamic attention
+            if config.dynamic_att:
                 p0 = h
                 u = tf.reshape(tf.tile(tf.expand_dims(u, 1), [1, M, 1, 1]), [N * M, JQ, 2 * d])
                 q_mask = tf.reshape(tf.tile(tf.expand_dims(self.q_mask, 1), [1, M, 1]), [N * M, JQ])
@@ -216,18 +229,24 @@ class Model(object):
                 second_cell_bw = AttentionCell(cell3_bw, u, mask=q_mask, mapper='sim',
                                                input_keep_prob=self.config.input_keep_prob, is_train=self.is_train)
             else:
-                # u [N, 1, 600] 
-                # h [N, M, 1, 600]  
+                # u [N, 1, 2d] 
+                # h [N, M, 1, 2d]  
                 # p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0", tensor_dict=self.tensor_dict)
                 if config.use_sentence_emb:
                     p0 = attention_layer(config, self.is_train, h, u, h_mask=None, u_mask=None, scope="p0", tensor_dict=self.tensor_dict)
                 else:
+                    ##########################
+                    ## Attention Flow Layer
+                    ##########################
                     p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0", tensor_dict=self.tensor_dict)
                 first_cell_fw = d_cell2_fw
                 second_cell_fw = d_cell3_fw
                 first_cell_bw = d_cell2_bw
                 second_cell_bw = d_cell3_bw
 
+            ########################
+            ## Modeling Layer start
+            ########################
             (fw_g0, bw_g0), _ = bidirectional_dynamic_rnn(first_cell_fw, first_cell_bw, p0, x_len, dtype='float', scope='g0')  # [N, M, JX, 2d]
             g0 = tf.concat(axis=3, values=[fw_g0, bw_g0])
             (fw_g1, bw_g1), _ = bidirectional_dynamic_rnn(second_cell_fw, second_cell_bw, g0, x_len, dtype='float', scope='g1')  # [N, M, JX, 2d]
@@ -235,6 +254,10 @@ class Model(object):
 
             logits = get_logits([g1, p0], d, True, wd=config.wd, input_keep_prob=config.input_keep_prob,
                                 mask=self.x_mask, is_train=self.is_train, func=config.answer_func, scope='logits1')
+            
+            ########################
+            ## Modeling Layer End
+            ########################
             a1i = softsel(tf.reshape(g1, [N, M * JX, 2 * d]), tf.reshape(logits, [N, M * JX]))
             a1i = tf.tile(tf.expand_dims(tf.expand_dims(a1i, 1), 1), [1, M, JX, 1])
 
@@ -434,7 +457,7 @@ class Model(object):
                 if nai:
                     na[i] = nai
                     continue
-                start_idx, stop_idx = random.choice(yi)
+                start_idx, stop_idx = random.choice(yi)  # 随机选一个答案
                 j, k = start_idx
                 j2, k2 = stop_idx
                 if config.single:
@@ -453,7 +476,9 @@ class Model(object):
                 else:
                     wy[i, j, k:len(batch.data['x'][i][j])] = True
                     wy[i, j2, :k2] = True
-
+        
+        # 通过查找model的shared.json中的word2id，获取word对应的id
+        # 如果使用glove获取不在shared里面的单词的词向量，需要concat两个矩阵
         def _get_word(word):
             d = batch.shared['word2idx']
             for each in (word, word.lower(), word.capitalize(), word.upper()):

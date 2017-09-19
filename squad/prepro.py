@@ -7,10 +7,11 @@ import os
 from collections import Counter
 
 from tqdm import tqdm
+import numpy as np
 
 from squad.utils import get_word_span, get_word_idx, process_tokens
 
-import nltk.tokenize as nltk
+import nltk.tokenize as tk
 import hashlib
 
 def main():
@@ -176,9 +177,9 @@ def getHashCode(context):
 def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="default", in_path=None):
     if args.tokenizer == "PTB":
         
-        sent_tokenize = nltk.sent_tokenize
+        sent_tokenize = tk.sent_tokenize
         def word_tokenize(tokens):
-            return [token.replace("''", '"').replace("``", '"') for token in nltk.word_tokenize(tokens)]
+            return [token.replace("''", '"').replace("``", '"') for token in tk.word_tokenize(tokens)]
     elif args.tokenizer == 'Stanford':
         from my.corenlp_interface import CoreNLPInterface
         interface = CoreNLPInterface(args.url, args.port)
@@ -186,7 +187,7 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
         word_tokenize = interface.split_sent
     else:
         raise Exception()
-
+        
     if not args.split:
         sent_tokenize = lambda para: [para]
 
@@ -214,14 +215,18 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
         cx.append(cxp)
         p.append(pp)
         
-        
         for pi, para in enumerate(article['paragraphs']):
             # wordss
             context = para['context']
             context = context.replace("''", '" ')
             context = context.replace("``", '" ')
-            xi = list(map(word_tokenize, sent_tokenize(context)))
+            xi = list(map(word_tokenize, [context]))
+            
             xi = [process_tokens(tokens) for tokens in xi]  # process tokens
+            
+            #print (np.array(xi).shape)
+            #print (context)
+            #print (xi)
             
             # if pi == 0:
             #    print (len(nltk.sent_tokenize(context)))
@@ -238,7 +243,6 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
             # only one sentence add
             # c2id[getHashCode(' '.join(xi[0]))] = xcnt
             # xcnt += 1
-            
             
             
                              
@@ -325,10 +329,10 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
                 
                 #q2id[getHashCode(' '.join(qi))] = len(list(q2id.keys()))
                 
-
         if args.debug:
             break
     
+    print (args.tokenizer)
     # glove
     # word2vec_dict = get_word2vec(args, word_counter)
     # lower_word2vec_dict = get_word2vec(args, lower_word_counter)

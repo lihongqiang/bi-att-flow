@@ -57,7 +57,7 @@ flags.DEFINE_boolean("sentece_token", False, "sentece")
 # Training / test parameters
 flags.DEFINE_integer("batch_size", 60, "Batch size [60]")
 flags.DEFINE_integer("val_num_batches", 100, "validation num batches [100]")
-flags.DEFINE_integer("test_num_batches", 0, "test num batches [0]")
+flags.DEFINE_integer("test_num_batches", 100, "test num batches [0]")
 flags.DEFINE_integer("num_epochs", 12, "Total number of epochs for training [12]")
 flags.DEFINE_integer("num_steps", 20000, "Number of steps [20000]")
 
@@ -129,8 +129,9 @@ flags.DEFINE_bool("highway", True, "Use highway? [True]")
 flags.DEFINE_bool("use_sentence_emb", False, "use sentence emb? [True]")
 flags.DEFINE_integer("sent_dim", 600, "sentence emb dim")
 
-# add pretrained word2vec
+flags.DEFINE_bool("fraction", False, "Softmax the left answer score when getting multi answer [False]")
 
+flags.DEFINE_bool("retrain", False, "retrain")
 
 def main(_):
     config = flags.FLAGS
